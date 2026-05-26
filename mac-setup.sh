@@ -548,6 +548,19 @@ EOF
     esac
 }
 
+improve_starship_prompt_contrast() {
+    local config_path="$1"
+
+    [ -f "$config_path" ] || return 0
+
+    sed -i '' \
+        -e 's/style = "bg:color_orange fg:color_fg0"/style = "bg:color_orange fg:color_bg1"/' \
+        -e 's/style_user = "bg:color_orange fg:color_fg0"/style_user = "bg:color_orange fg:color_bg1"/' \
+        -e 's/style_root = "bg:color_orange fg:color_fg0"/style_root = "bg:color_orange fg:color_bg1"/' \
+        -e 's/style = "fg:color_fg0 bg:color_yellow"/style = "fg:color_bg1 bg:color_yellow"/' \
+        "$config_path"
+}
+
 update_starship_palette() {
     local config_path="$1"
     local profile_name="$2"
@@ -583,6 +596,7 @@ update_starship_palette() {
     printf "\n" >> "$tmp_path"
     print_starship_palette_toml "$palette_name" >> "$tmp_path"
     mv "$tmp_path" "$config_path"
+    improve_starship_prompt_contrast "$config_path"
     echo "✓ Starship renk paleti '$palette_name' olarak güncellendi."
 }
 
@@ -1755,6 +1769,9 @@ if [ ${#FAILED_STEPS[@]} -eq 0 ]; then
 else
     print_header "Kurulum Tamamlandı" "Bazı adımlar kontrol istiyor"
 fi
-echo -e "  ${BLUE}Yeni PATH ve terminal ayarları için terminali yeniden açın.${NC}"
-echo -e "  ${BLUE}Alternatif: ${CYAN}source ~/.zshrc${NC}"
+echo -e "  ${BLUE}Yeni PATH ve terminal ayarları aynı pencerede etkinleştiriliyor...${NC}"
 print_separator "$BLUE" "-"
+
+if [ -t 0 ] && [ -n "$SHELL" ] && [ -x "$SHELL" ]; then
+    exec "$SHELL" -l
+fi
