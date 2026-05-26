@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==============================================================================
-# macOS Geliştirici Ortamı İnteraktif Kurulum Sihirbazı (Premium Keyboard Wizard)
+# macOS Geliştirici Ortamı İnteraktif Kurulum Sihirbazı (Premium Version Selection Wizard)
 # ==============================================================================
 
 # Renk Tanımlamaları
@@ -14,7 +14,17 @@ CYAN='\033[0;36m'
 NC='\033[0m' # Renk Sıfırlama
 CHECK="✓"
 
-# Kurulum Seçenekleri
+# Seçilen Varsayılan Versiyonlar
+SELECTED_FLUTTER_VERSION="stable"
+SELECTED_JAVA_VERSION="25-tem"
+SELECTED_RUBY_VERSION="3.4.1"
+
+# Çevrimdışı / Hata Durumu Sürüm Listeleri (Fallback)
+FALLBACK_FLUTTER_VERSIONS=("stable" "3.29.0" "3.27.0" "3.24.5" "3.22.3" "3.19.6")
+FALLBACK_JAVA_VERSIONS=("25-tem" "23-tem" "21-tem" "17-tem" "11-tem" "21-zulu" "17-zulu")
+FALLBACK_RUBY_VERSIONS=("3.4.1" "3.3.6" "3.2.6" "3.1.6")
+
+# Kurulum Bileşenleri
 CHOICES=(
     "Sistem Gereksinimleri (Xcode CLT & Rosetta 2)"
     "Homebrew Paket Yöneticisi"
@@ -34,8 +44,8 @@ SELECTIONS=(1 1 1 1 1 1 1 1 1 1)
 # Temalar
 THEME_NAMES=("Gruvbox-dark" "Dracula" "Nord" "Solarized-Dark")
 THEME_LABELS=("Gruvbox Dark" "Dracula" "Nord" "Solarized Dark")
-THEME_SELECTIONS=(1 0 1 0) # Varsayılan olarak birden fazla kurulabilir
-THEME_DEFAULT=2 # Varsayılan tema (Kullanıcının seçimi üzerine Nord yapıldı)
+THEME_SELECTIONS=(1 0 1 0) # Çoklu tema seçilebilir
+THEME_DEFAULT=2 # Varsayılan olarak Nord seçili
 
 CURRENT_INDEX=0
 TOTAL_ITEMS=16 # 10 bileşen + 4 tema + 2 aksiyon
@@ -45,14 +55,151 @@ cleanup_cursor() {
     tput cnorm # İmleci göster
 }
 trap cleanup_cursor EXIT
-tput civis # İmleci geçici olarak gizle
+tput civis # İmleci gizle
+
+# Sürüm Çekme Fonksiyonları
+fetch_flutter_versions() {
+    # Git ls-remote ile etiketleri sorgula (2 saniye timeout ile)
+    local fetched
+    fetched=$(git ls-remote --tags --refs https://github.com/flutter/flutter.git 2>/dev/null | \
+              awk -F'/' '{print $3}' | \
+              grep -E "^[3-9]\.[0-9]+\.[0-9]+$" | \
+              sort -V -r | \
+              head -n 10)
+    
+    if [ -n "$fetched" ]; then
+        echo "stable"
+        echo "$fetched"
+    else
+        for v in "${FALLBACK_FLUTTER_VERSIONS[@]}"; do
+            echo "$v"
+        done
+    fi
+}
+
+fetch_java_versions() {
+    # JDK LTS ve Popüler Güncel Sürümler (Instant and Reliable)
+    for v in "${FALLBACK_JAVA_VERSIONS[@]}"; do
+        echo "$v"
+    done
+}
+
+fetch_ruby_versions() {
+    # Ruby Kararlı ve Popüler Sürümler (Instant and Reliable)
+    for v in "${FALLBACK_RUBY_VERSIONS[@]}"; do
+        echo "$v"
+    done
+}
+
+read_keypress() {
+    local key
+    read -rsn1 key
+    if [[ $key == $'\x1b' ]]; then
+        read -rsn2 -t 0.1 key
+        if [[ $key == "[A" ]]; then
+            echo "UP"
+        elif [[ $key == "[B" ]]; then
+            echo "DOWN"
+        elif [[ $key == "[C" ]]; then
+            echo "RIGHT"
+        elif [[ $key == "[D" ]]; then
+            echo "LEFT"
+        fi
+    elif [[ $key == "" ]]; then
+        echo "ENTER"
+    elif [[ $key == " " ]]; then
+        echo "SPACE"
+    elif [[ $key == "v" || $key == "V" || $key == "d" || $key == "D" ]]; then
+        echo "DEFAULT"
+    elif [[ $key == "a" || $key == "A" ]]; then
+        echo "ALL"
+    elif [[ $key == "q" || $key == "Q" ]]; then
+        echo "QUIT"
+    fi
+}
+
+# Klavye Gezinmeli Versiyon Alt Menüsü
+show_version_submenu() {
+    local title="$1"
+    local current_val="$2"
+    shift 2
+    local options=("$@")
+    local total=${#options[@]}
+    local selected_idx=0
+
+    # Mevcut değeri bulup imleci oraya yerleştir
+    for i in "${!options[@]}"; do
+        if [[ "${options[$i]}" == "$current_val" ]]; then
+            selected_idx=$i
+            break
+        fi
+    done
+
+    while true; do
+        clear
+        echo -e "${BLUE}=======================================================${NC}"
+        echo -e "${BLUE}               $title Sürüm Seçimi                     ${NC}"
+        echo -e "${BLUE}=======================================================${NC}"
+        echo -e "Klavye ${YELLOW}Yön Tuşları (↑/↓)${NC} ile gezinin."
+        echo -e "Seçiminizi onaylamak için ${GREEN}ENTER${NC} veya ${GREEN}SPACE${NC} tuşuna basın."
+        echo -e "${BLUE}-------------------------------------------------------${NC}"
+
+        for i in "${!options[@]}"; do
+            local marker=" "
+            if [[ "${options[$i]}" == "$current_val" ]]; then
+                marker="${GREEN}${CHECK}${NC}"
+            fi
+
+            if [ $selected_idx -eq $i ]; then
+                echo -e "${CYAN}➔ [${marker}] ${options[$i]}${NC}"
+            else
+                echo -e "   [${marker}] ${options[$i]}"
+            fi
+        done
+
+        echo -e "${BLUE}-------------------------------------------------------${NC}"
+        
+        local action
+        action=$(read_keypress)
+
+        case $action in
+            "UP")
+                selected_idx=$(( (selected_idx - 1 + total) % total ))
+                ;;
+            "DOWN")
+                selected_idx=$(( (selected_idx + 1) % total ))
+                ;;
+            "SPACE"|"ENTER")
+                echo "${options[$selected_idx]}"
+                return 0
+                ;;
+            "LEFT"|"QUIT")
+                echo "$current_val"
+                return 0
+                ;;
+        esac
+    done
+}
+
+toggle_all() {
+    local sum=0
+    for val in "${SELECTIONS[@]}"; do
+        sum=$((sum + val))
+    done
+    if [ $sum -gt 0 ]; then
+        SELECTIONS=(0 0 0 0 0 0 0 0 0 0)
+    else
+        SELECTIONS=(1 1 1 1 1 1 1 1 1 1)
+    fi
+}
 
 render_menu() {
     clear
     echo -e "${BLUE}=======================================================${NC}"
     echo -e "${BLUE}        macOS Geliştirici Ortamı Kurulum Sihirbazı     ${NC}"
     echo -e "${BLUE}=======================================================${NC}"
-    echo -e "Klavye ${YELLOW}Yön Tuşları (↑/↓)${NC} ile gezinin, ${YELLOW}SPACE${NC} veya ${YELLOW}ENTER${NC} ile seçin."
+    echo -e "Klavye ${YELLOW}Yön Tuşları (↑/↓)${NC} ile gezinin, ${YELLOW}SPACE${NC} ile seçim durumunu değiştirin."
+    echo -e "Ruby, Java ve Flutter üzerinde ${YELLOW}ENTER${NC} veya ${YELLOW}➔ (Sağ)${NC} tuşuna basarak versiyon seçin."
     echo -e "Temalar üzerinde ${YELLOW}'v'${NC} tuşuna basarak varsayılan temayı seçin."
     echo -e "Hepsini seçmek/bırakmak için ${YELLOW}'a'${NC} tuşuna basabilirsiniz."
     echo -e "Kuruluma başlamak için en alttaki ${GREEN}[ Kuruluma Başla ]${NC} seçeneğinde ${GREEN}ENTER${NC}'a basın."
@@ -65,10 +212,19 @@ render_menu() {
             check="${GREEN}${CHECK}${NC}"
         fi
         
+        local label="${CHOICES[$i]}"
+        if [ $i -eq 4 ]; then
+            label="${CHOICES[$i]} (${CYAN}v$SELECTED_RUBY_VERSION${NC})"
+        elif [ $i -eq 5 ]; then
+            label="${CHOICES[$i]} (${CYAN}v$SELECTED_JAVA_VERSION${NC})"
+        elif [ $i -eq 6 ]; then
+            label="${CHOICES[$i]} (${CYAN}v$SELECTED_FLUTTER_VERSION${NC})"
+        fi
+
         if [ $CURRENT_INDEX -eq $i ]; then
-            echo -e "${CYAN}➔ [${check}] ${CHOICES[$i]}${NC}"
+            echo -e "${CYAN}➔ [${check}] ${label}${NC}"
         else
-            echo -e "   [${check}] ${CHOICES[$i]}"
+            echo -e "   [${check}] ${label}"
         fi
     done
 
@@ -124,41 +280,6 @@ render_menu() {
     echo -e "${BLUE}-------------------------------------------------------${NC}"
 }
 
-read_keypress() {
-    local key
-    read -rsn1 key
-    if [[ $key == $'\x1b' ]]; then
-        read -rsn2 -t 0.1 key
-        if [[ $key == "[A" ]]; then
-            echo "UP"
-        elif [[ $key == "[B" ]]; then
-            echo "DOWN"
-        fi
-    elif [[ $key == "" ]]; then
-        echo "ENTER"
-    elif [[ $key == " " ]]; then
-        echo "SPACE"
-    elif [[ $key == "v" || $key == "V" || $key == "d" || $key == "D" ]]; then
-        echo "DEFAULT"
-    elif [[ $key == "a" || $key == "A" ]]; then
-        echo "ALL"
-    elif [[ $key == "q" || $key == "Q" ]]; then
-        echo "QUIT"
-    fi
-}
-
-toggle_all() {
-    local sum=0
-    for val in "${SELECTIONS[@]}"; do
-        sum=$((sum + val))
-    done
-    if [ $sum -gt 0 ]; then
-        SELECTIONS=(0 0 0 0 0 0 0 0 0 0)
-    else
-        SELECTIONS=(1 1 1 1 1 1 1 1 1 1)
-    fi
-}
-
 # İnteraktif Döngü
 while true; do
     render_menu
@@ -171,9 +292,9 @@ while true; do
         "DOWN")
             CURRENT_INDEX=$(( (CURRENT_INDEX + 1) % TOTAL_ITEMS ))
             ;;
-        "SPACE"|"ENTER")
+        "RIGHT"|"ENTER")
             if [ $CURRENT_INDEX -eq 14 ]; then
-                # Kuruluma Başla aksiyonu tetiklendiğinde ENTER ile devam et
+                # Kuruluma Başla tetiklendiğinde ENTER ile devam et
                 if [[ $action == "ENTER" ]]; then
                     if [ ${SELECTIONS[9]} -eq 1 ]; then
                         local theme_sum=0
@@ -195,18 +316,90 @@ while true; do
                     tput cnorm
                     exit 0
                 fi
-            elif [ $CURRENT_INDEX -ge 0 ] && [ $CURRENT_INDEX -le 9 ]; then
+            elif [ $CURRENT_INDEX -eq 4 ]; then
+                # Ruby Versiyon Alt Menüsü
+                clear
+                echo -e "${BLUE}=======================================================${NC}"
+                echo -e "${BLUE}        macOS Geliştirici Ortamı Kurulum Sihirbazı     ${NC}"
+                echo -e "${BLUE}=======================================================${NC}"
+                echo -e "\n${YELLOW}Kurulabilir Ruby sürümleri listeleniyor... ⏳${NC}\n"
+                echo -e "${BLUE}-------------------------------------------------------${NC}"
+                
+                local ruby_vers=()
+                while IFS= read -r line; do
+                    ruby_vers+=("$line")
+                done < <(fetch_ruby_versions)
+
+                local result
+                result=$(show_version_submenu "Ruby" "$SELECTED_RUBY_VERSION" "${ruby_vers[@]}")
+                SELECTED_RUBY_VERSION="$result"
+                SELECTIONS[4]=1 # Seçim yapılınca otomatik aktif yap
+            elif [ $CURRENT_INDEX -eq 5 ]; then
+                # Java Versiyon Alt Menüsü
+                clear
+                echo -e "${BLUE}=======================================================${NC}"
+                echo -e "${BLUE}        macOS Geliştirici Ortamı Kurulum Sihirbazı     ${NC}"
+                echo -e "${BLUE}=======================================================${NC}"
+                echo -e "\n${YELLOW}Kurulabilir Java (JDK) sürümleri listeleniyor... ⏳${NC}\n"
+                echo -e "${BLUE}-------------------------------------------------------${NC}"
+
+                local java_vers=()
+                while IFS= read -r line; do
+                    java_vers+=("$line")
+                done < <(fetch_java_versions)
+
+                local result
+                result=$(show_version_submenu "Java" "$SELECTED_JAVA_VERSION" "${java_vers[@]}")
+                SELECTED_JAVA_VERSION="$result"
+                SELECTIONS[5]=1 # Seçim yapılınca otomatik aktif yap
+            elif [ $CURRENT_INDEX -eq 6 ]; then
+                # Flutter Versiyon Alt Menüsü
+                clear
+                echo -e "${BLUE}=======================================================${NC}"
+                echo -e "${BLUE}        macOS Geliştirici Ortamı Kurulum Sihirbazı     ${NC}"
+                echo -e "${BLUE}=======================================================${NC}"
+                echo -e "\n${YELLOW}Resmi Git deposundan kararlı Flutter sürümleri sorgulanıyor... ⏳${NC}\n"
+                echo -e "${BLUE}-------------------------------------------------------${NC}"
+
+                local flutter_vers=()
+                while IFS= read -r line; do
+                    flutter_vers+=("$line")
+                done < <(fetch_flutter_versions)
+
+                local result
+                result=$(show_version_submenu "Flutter" "$SELECTED_FLUTTER_VERSION" "${flutter_vers[@]}")
+                SELECTED_FLUTTER_VERSION="$result"
+                SELECTIONS[6]=1 # Seçim yapılınca otomatik aktif yap
+            else
+                # Sürüm menüsü olmayan diğer bileşenleri/temaları ENTER ile de seçebiliriz
+                if [ $CURRENT_INDEX -ge 0 ] && [ $CURRENT_INDEX -le 9 ]; then
+                    SELECTIONS[$CURRENT_INDEX]=$(( 1 - SELECTIONS[$CURRENT_INDEX] ))
+                elif [ $CURRENT_INDEX -ge 10 ] && [ $CURRENT_INDEX -le 13 ]; then
+                    local theme_idx=$(( CURRENT_INDEX - 10 ))
+                    THEME_SELECTIONS[$theme_idx]=$(( 1 - THEME_SELECTIONS[$theme_idx] ))
+                    if [ ${THEME_SELECTIONS[$theme_idx]} -eq 1 ]; then
+                        SELECTIONS[9]=1
+                    fi
+                    if [ ${THEME_SELECTIONS[$theme_idx]} -eq 0 ] && [ $THEME_DEFAULT -eq $theme_idx ]; then
+                        for k in {0..3}; do
+                            if [ ${THEME_SELECTIONS[$k]} -eq 1 ]; then
+                                THEME_DEFAULT=$k
+                                break
+                            fi
+                        done
+                    fi
+                fi
+            fi
+            ;;
+        "SPACE")
+            if [ $CURRENT_INDEX -ge 0 ] && [ $CURRENT_INDEX -le 9 ]; then
                 SELECTIONS[$CURRENT_INDEX]=$(( 1 - SELECTIONS[$CURRENT_INDEX] ))
             elif [ $CURRENT_INDEX -ge 10 ] && [ $CURRENT_INDEX -le 13 ]; then
                 local theme_idx=$(( CURRENT_INDEX - 10 ))
                 THEME_SELECTIONS[$theme_idx]=$(( 1 - THEME_SELECTIONS[$theme_idx] ))
-                
-                # Eğer tema seçildiyse terminal özelleştirmeyi otomatik olarak aktif et
                 if [ ${THEME_SELECTIONS[$theme_idx]} -eq 1 ]; then
                     SELECTIONS[9]=1
                 fi
-                
-                # Eğer seçimi kaldırılan tema varsayılan ise, varsayılanı başka seçiliye kaydır
                 if [ ${THEME_SELECTIONS[$theme_idx]} -eq 0 ] && [ $THEME_DEFAULT -eq $theme_idx ]; then
                     for k in {0..3}; do
                         if [ ${THEME_SELECTIONS[$k]} -eq 1 ]; then
@@ -300,41 +493,75 @@ if [ ${SELECTIONS[3]} -eq 1 ]; then
     echo -e "${GREEN}✓ CLI ve dil bağımlılıkları tamamlandı.${NC}\n"
 fi
 
-# 5. Ruby & Rails
+# 5. Ruby & Rails (rbenv entegre edildi)
 if [ ${SELECTIONS[4]} -eq 1 ]; then
-    echo -e "${YELLOW}>> Ruby & Rails kurulumu yapılıyor...${NC}"
-    echo 'export PATH="/opt/homebrew/opt/ruby/bin:$PATH"' >> ~/.zprofile
-    export PATH="/opt/homebrew/opt/ruby/bin:$PATH"
+    echo -e "${YELLOW}>> Ruby & Rails kurulumu yapılıyor (Seçilen Sürüm: v$SELECTED_RUBY_VERSION)...${NC}"
     
-    echo "Rails kuruluyor..."
+    # rbenv ve ruby-build kurulumu
+    echo "rbenv ve ruby-build kuruluyor..."
+    brew install rbenv ruby-build
+
+    # rbenv yapılandırması
+    ZSHRC_FILE="$HOME/.zshrc"
+    touch "$ZSHRC_FILE"
+    if ! grep -q "rbenv init" "$ZSHRC_FILE"; then
+        echo -e '\n# Initialize rbenv\neval "$(rbenv init -)"' >> "$ZSHRC_FILE"
+    fi
+    eval "$(rbenv init -)"
+
+    echo "Ruby v$SELECTED_RUBY_VERSION kuruluyor (Bu işlem birkaç dakika sürebilir)..."
+    if rbenv versions | grep -q "$SELECTED_RUBY_VERSION"; then
+        echo "✓ Ruby v$SELECTED_RUBY_VERSION zaten rbenv ile kurulu."
+    else
+        rbenv install "$SELECTED_RUBY_VERSION"
+    fi
+
+    rbenv global "$SELECTED_RUBY_VERSION"
+    
+    # Gem path ayarı
+    echo 'export PATH="$HOME/.rbenv/shims:$PATH"' >> ~/.zprofile
+    export PATH="$HOME/.rbenv/shims:$PATH"
+
+    echo "Rails gem kuruluyor..."
     gem install rails
+    rbenv rehash
     echo -e "${GREEN}✓ Ruby & Rails kurulumu tamamlandı.${NC}\n"
 fi
 
 # 6. Java & SDKMAN
 if [ ${SELECTIONS[5]} -eq 1 ]; then
-    echo -e "${YELLOW}>> Java & SDKMAN kurulumu yapılıyor...${NC}"
+    echo -e "${YELLOW}>> Java & SDKMAN kurulumu yapılıyor (Seçilen Sürüm: v$SELECTED_JAVA_VERSION)...${NC}"
     if [ ! -d "$HOME/.sdkman" ]; then
         curl -s "https://get.sdkman.io" | /opt/homebrew/bin/bash
-        source "$HOME/.sdkman/bin/sdkman-init.sh"
-        sdk install java 25-tem
-    else
-        source "$HOME/.sdkman/bin/sdkman-init.sh"
-        sdk install java 25-tem
     fi
+    
+    source "$HOME/.sdkman/bin/sdkman-init.sh"
+    
+    echo "JDK $SELECTED_JAVA_VERSION kuruluyor..."
+    sdk install java "$SELECTED_JAVA_VERSION" || true
+    sdk default java "$SELECTED_JAVA_VERSION" || true
     echo -e "${GREEN}✓ Java & SDKMAN kurulumu tamamlandı.${NC}\n"
 fi
 
 # 7. Flutter SDK
 if [ ${SELECTIONS[6]} -eq 1 ]; then
-    echo -e "${YELLOW}>> Flutter SDK ve Mobil Geliştirme Ortamı kuruluyor...${NC}"
+    echo -e "${YELLOW}>> Flutter SDK ve Mobil Geliştirme Ortamı kuruluyor (Seçilen Sürüm: v$SELECTED_FLUTTER_VERSION)...${NC}"
     FLUTTER_DIR="$HOME/development/flutter"
+    
     if [ ! -d "$FLUTTER_DIR" ]; then
         mkdir -p ~/development
-        git clone https://github.com/flutter/flutter.git -b stable "$FLUTTER_DIR"
+        echo "Flutter SDK $SELECTED_FLUTTER_VERSION klonlanıyor..."
+        git clone https://github.com/flutter/flutter.git -b "$SELECTED_FLUTTER_VERSION" "$FLUTTER_DIR"
         echo 'export PATH="$PATH:$HOME/development/flutter/bin"' >> ~/.zprofile
         export PATH="$PATH:$HOME/development/flutter/bin"
         flutter precache
+    else
+        echo "Mevcut Flutter kurulumu bulundu. Seçilen sürüme ($SELECTED_FLUTTER_VERSION) geçiş yapılıyor..."
+        cd "$FLUTTER_DIR" || exit
+        git fetch --tags
+        git checkout "$SELECTED_FLUTTER_VERSION"
+        flutter precache
+        cd - >/dev/null || exit
     fi
 
     echo "Flutter Doctor çalıştırılıyor ve lisanslar onaylanıyor..."
@@ -487,7 +714,7 @@ if [ ${SELECTIONS[9]} -eq 1 ]; then
     echo -e "${GREEN}✓ Terminal özelleştirmeleri başarıyla uygulandı.${NC}\n"
 fi
 
-# Temizlik işlemleri (Gürültülü Homebrew uyarıları temizlendi)
+# Temizlik işlemleri (Gürültülü Homebrew cleanup çıktıları elendi)
 echo "Homebrew gereksiz önbellekleri temizleniyor..."
 brew cleanup 2>&1 | grep -v -i "skipping" || true
 
