@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==============================================================================
-# macOS Geliştirici Ortamı İnteraktif Kurulum Sihirbazı (Premium Version Selection Wizard)
+# macOS Geliştirici Ortamı İnteraktif Kurulum Sihirbazı
 # ==============================================================================
 
 # Renk Tanımlamaları
@@ -14,6 +14,10 @@ CYAN='\033[0;36m'
 NC='\033[0m' # Renk Sıfırlama
 CHECK="✓"
 FAILED_STEPS=()
+APP_TITLE="macOS Geliştirici Ortamı"
+APP_SUBTITLE="İnteraktif Kurulum Sihirbazı"
+UI_WIDTH=72
+MENU_LABEL_WIDTH=68
 
 # Seçilen Varsayılan Versiyonlar
 SELECTED_FLUTTER_VERSION="stable"
@@ -109,6 +113,7 @@ THEME_NAMES=("Gruvbox-dark" "Dracula" "Nord" "Solarized-Dark" "rose-pine" "Monok
 THEME_LABELS=("Gruvbox Dark" "Dracula" "Nord" "Solarized Dark" "Rosé Pine" "Monokai" "One Dark" "Tokyo Night")
 THEME_SELECTIONS=(1 0 1 0 1 0 1 0) # Çoklu tema seçilebilir
 THEME_DEFAULT=2 # Varsayılan olarak Nord seçili
+TERMINAL_DEFAULT_PROFILE=""
 
 CURRENT_INDEX=0
 FOCUS_SIDE="left"
@@ -203,9 +208,121 @@ print_failure_summary() {
     done
 }
 
+repeat_char() {
+    local char="$1"
+    local count="$2"
+    printf "%*s" "$count" "" | tr " " "$char"
+}
+
+print_separator() {
+    local color="${1:-$BLUE}"
+    local char="${2:--}"
+    echo -e "${color}$(repeat_char "$char" "$UI_WIDTH")${NC}"
+}
+
+print_centered() {
+    local text="$1"
+    local color="${2:-$BLUE}"
+    local text_len=${#text}
+    local pad=$(( (UI_WIDTH - text_len) / 2 ))
+
+    if [ $pad -lt 0 ]; then
+        pad=0
+    fi
+
+    printf "%b%*s%s%b\n" "$color" "$pad" "" "$text" "$NC"
+}
+
+print_header() {
+    local title="$1"
+    local subtitle="$2"
+
+    print_separator "$BLUE" "="
+    print_centered "$title" "$BLUE"
+    if [ -n "$subtitle" ]; then
+        print_centered "$subtitle" "$CYAN"
+    fi
+    print_separator "$BLUE" "="
+}
+
+print_help_line() {
+    echo -e "  $1"
+}
+
+print_loading_header() {
+    local message="$1"
+    clear
+    print_header "$APP_TITLE" "$APP_SUBTITLE"
+    echo
+    echo -e "  ${YELLOW}$message${NC}"
+    echo
+    print_separator "$BLUE" "-"
+}
+
+count_selected() {
+    local sum=0
+    local val
+    for val in "$@"; do
+        sum=$((sum + val))
+    done
+    echo "$sum"
+}
+
 terminal_profile_exists() {
     local profile_name="$1"
     osascript -e "tell application \"Terminal\" to exists settings set \"$profile_name\"" 2>/dev/null | grep -q "true"
+}
+
+terminal_profile_installed() {
+    local profile_name="$1"
+    /usr/libexec/PlistBuddy -c "Print :'Window Settings':$profile_name:name" "$HOME/Library/Preferences/com.apple.Terminal.plist" >/dev/null 2>&1
+}
+
+theme_index_for_profile() {
+    local profile_name="$1"
+    local i
+
+    case "$profile_name" in
+        "Solarized Dark"|"Solarized Dark ansi") profile_name="Solarized-Dark" ;;
+        "One Dark") profile_name="One-Dark" ;;
+        "tk2") profile_name="tokyo-night" ;;
+    esac
+
+    for i in "${!THEME_NAMES[@]}"; do
+        if [ "${THEME_NAMES[$i]}" = "$profile_name" ]; then
+            echo "$i"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+sync_theme_state_from_terminal() {
+    local installed_count=0
+    local default_profile
+    local default_idx
+    local i
+
+    for i in "${!THEME_NAMES[@]}"; do
+        if terminal_profile_installed "${THEME_NAMES[$i]}"; then
+            THEME_SELECTIONS[$i]=1
+            installed_count=$((installed_count + 1))
+        else
+            THEME_SELECTIONS[$i]=0
+        fi
+    done
+
+    if [ $installed_count -eq 0 ]; then
+        THEME_SELECTIONS=(1 0 1 0 1 0 1 0)
+    fi
+
+    default_profile=$(defaults read com.apple.Terminal "Default Window Settings" 2>/dev/null || true)
+    TERMINAL_DEFAULT_PROFILE="$default_profile"
+    if default_idx=$(theme_index_for_profile "$default_profile"); then
+        THEME_DEFAULT=$default_idx
+        THEME_SELECTIONS[$THEME_DEFAULT]=1
+    fi
 }
 
 read_terminal_profile_name() {
@@ -214,6 +331,10 @@ read_terminal_profile_name() {
     local profile_name
 
     profile_name=$(/usr/libexec/PlistBuddy -c "Print :name" "$theme_path" 2>/dev/null)
+    if [ -z "$profile_name" ]; then
+        profile_name=$(defaults read "$theme_path" name 2>/dev/null)
+    fi
+
     if [ -n "$profile_name" ]; then
         echo "$profile_name"
     else
@@ -221,13 +342,47 @@ read_terminal_profile_name() {
     fi
 }
 
+set_terminal_profile_file_name() {
+    local theme_path="$1"
+    local profile_name="$2"
+
+    if /usr/libexec/PlistBuddy -c "Set :name $profile_name" "$theme_path" 2>/dev/null; then
+        return 0
+    fi
+
+    /usr/libexec/PlistBuddy -c "Add :name string $profile_name" "$theme_path" 2>/dev/null
+}
+
+download_theme_file() {
+    local theme_path="$1"
+    local theme_name="$2"
+    shift 2
+
+    local tmp_path="${theme_path}.tmp"
+    local theme_url
+    for theme_url in "$@"; do
+        if [ -z "$theme_url" ]; then
+            continue
+        fi
+
+        echo "[$theme_name] terminal renk profili indiriliyor..."
+        if curl -fL --retry 2 --connect-timeout 10 "$theme_url" -o "$tmp_path"; then
+            mv "$tmp_path" "$theme_path"
+            return 0
+        fi
+    done
+
+    rm -f "$tmp_path"
+    return 1
+}
+
 import_terminal_profile() {
     local theme_path="$1"
     local profile_name="$2"
 
     if ! terminal_profile_exists "$profile_name"; then
-        open "$theme_path"
-        for _ in {1..10}; do
+        open -a Terminal "$theme_path"
+        for _ in {1..20}; do
             sleep 0.5
             if terminal_profile_exists "$profile_name"; then
                 return 0
@@ -237,6 +392,198 @@ import_terminal_profile() {
     fi
 
     return 0
+}
+
+set_terminal_default_profile() {
+    local profile_name="$1"
+
+    defaults write com.apple.Terminal "Default Window Settings" -string "$profile_name"
+    defaults write com.apple.Terminal "Startup Window Settings" -string "$profile_name"
+    osascript \
+        -e "tell application \"Terminal\" to set default settings to settings set \"$profile_name\"" \
+        -e "tell application \"Terminal\" to set startup settings to settings set \"$profile_name\"" \
+        2>/dev/null || true
+}
+
+starship_palette_name_for_theme() {
+    local profile_name="$1"
+
+    case "$profile_name" in
+        "Gruvbox-dark") echo "gruvbox_dark" ;;
+        "Dracula") echo "dracula" ;;
+        "Nord") echo "nord" ;;
+        "Solarized-Dark"|"Solarized Dark"|"Solarized Dark ansi") echo "solarized_dark" ;;
+        "rose-pine") echo "rose_pine" ;;
+        "Monokai") echo "monokai" ;;
+        "One-Dark"|"One Dark") echo "one_dark" ;;
+        "tokyo-night") echo "tokyo_night" ;;
+        *) echo "gruvbox_dark" ;;
+    esac
+}
+
+print_starship_palette_toml() {
+    local palette_name="$1"
+
+    case "$palette_name" in
+        monokai)
+            cat <<'EOF'
+[palettes.monokai]
+color_fg0 = '#f8f8f2'
+color_bg1 = '#3e3d32'
+color_bg3 = '#75715e'
+color_blue = '#66d9ef'
+color_aqua = '#a1efe4'
+color_green = '#a6e22e'
+color_orange = '#fd971f'
+color_purple = '#ae81ff'
+color_red = '#f92672'
+color_yellow = '#e6db74'
+EOF
+            ;;
+        one_dark)
+            cat <<'EOF'
+[palettes.one_dark]
+color_fg0 = '#abb2bf'
+color_bg1 = '#282c34'
+color_bg3 = '#3e4451'
+color_blue = '#61afef'
+color_aqua = '#56b6c2'
+color_green = '#98c379'
+color_orange = '#d19a66'
+color_purple = '#c678dd'
+color_red = '#e06c75'
+color_yellow = '#e5c07b'
+EOF
+            ;;
+        tokyo_night)
+            cat <<'EOF'
+[palettes.tokyo_night]
+color_fg0 = '#c0caf5'
+color_bg1 = '#1a1b26'
+color_bg3 = '#414868'
+color_blue = '#7aa2f7'
+color_aqua = '#7dcfff'
+color_green = '#9ece6a'
+color_orange = '#ff9e64'
+color_purple = '#bb9af7'
+color_red = '#f7768e'
+color_yellow = '#e0af68'
+EOF
+            ;;
+        solarized_dark)
+            cat <<'EOF'
+[palettes.solarized_dark]
+color_fg0 = '#eee8d5'
+color_bg1 = '#073642'
+color_bg3 = '#586e75'
+color_blue = '#268bd2'
+color_aqua = '#2aa198'
+color_green = '#859900'
+color_orange = '#cb4b16'
+color_purple = '#6c71c4'
+color_red = '#dc322f'
+color_yellow = '#b58900'
+EOF
+            ;;
+        dracula)
+            cat <<'EOF'
+[palettes.dracula]
+color_fg0 = '#f8f8f2'
+color_bg1 = '#282a36'
+color_bg3 = '#44475a'
+color_blue = '#6272a4'
+color_aqua = '#8be9fd'
+color_green = '#50fa7b'
+color_orange = '#ffb86c'
+color_purple = '#bd93f9'
+color_red = '#ff5555'
+color_yellow = '#f1fa8c'
+EOF
+            ;;
+        nord)
+            cat <<'EOF'
+[palettes.nord]
+color_fg0 = '#eceff4'
+color_bg1 = '#2e3440'
+color_bg3 = '#4c566a'
+color_blue = '#5e81ac'
+color_aqua = '#88c0d0'
+color_green = '#a3be8c'
+color_orange = '#d08770'
+color_purple = '#b48ead'
+color_red = '#bf616a'
+color_yellow = '#ebcb8b'
+EOF
+            ;;
+        rose_pine)
+            cat <<'EOF'
+[palettes.rose_pine]
+color_fg0 = '#e0def4'
+color_bg1 = '#191724'
+color_bg3 = '#26233a'
+color_blue = '#31748f'
+color_aqua = '#9ccfd8'
+color_green = '#31748f'
+color_orange = '#f6c177'
+color_purple = '#c4a7e7'
+color_red = '#eb6f92'
+color_yellow = '#f6c177'
+EOF
+            ;;
+        *)
+            cat <<'EOF'
+[palettes.gruvbox_dark]
+color_fg0 = '#fbf1c7'
+color_bg1 = '#3c3836'
+color_bg3 = '#665c54'
+color_blue = '#458588'
+color_aqua = '#689d6a'
+color_green = '#98971a'
+color_orange = '#d65d0e'
+color_purple = '#b16286'
+color_red = '#cc241d'
+color_yellow = '#d79921'
+EOF
+            ;;
+    esac
+}
+
+update_starship_palette() {
+    local config_path="$1"
+    local profile_name="$2"
+    local palette_name
+    local tmp_path
+
+    palette_name=$(starship_palette_name_for_theme "$profile_name")
+    tmp_path="${config_path}.tmp"
+
+    if ! grep -q "color_orange" "$config_path" 2>/dev/null || ! grep -q "^\[palettes\\." "$config_path" 2>/dev/null; then
+        echo "✓ Mevcut starship.toml özel görünüyor, renk paleti değiştirilmedi."
+        return 0
+    fi
+
+    awk -v palette_name="$palette_name" '
+        BEGIN { skip_palette = 0 }
+        /^palette = / {
+            print "palette = '\''" palette_name "'\''"
+            next
+        }
+        /^\[palettes\./ {
+            skip_palette = 1
+            next
+        }
+        /^\[[^]]+\]/ {
+            skip_palette = 0
+        }
+        !skip_palette {
+            print
+        }
+    ' "$config_path" > "$tmp_path" || return 1
+
+    printf "\n" >> "$tmp_path"
+    print_starship_palette_toml "$palette_name" >> "$tmp_path"
+    mv "$tmp_path" "$config_path"
+    echo "✓ Starship renk paleti '$palette_name' olarak güncellendi."
 }
 
 apply_terminal_profile_font() {
@@ -376,12 +723,9 @@ show_version_submenu() {
 
     while true; do
         clear >&2
-        echo -e "${BLUE}=======================================================${NC}" >&2
-        echo -e "${BLUE}               $title Sürüm Seçimi                     ${NC}" >&2
-        echo -e "${BLUE}=======================================================${NC}" >&2
-        echo -e "Klavye ${YELLOW}Yön Tuşları (↑/↓)${NC} ile gezinin." >&2
-        echo -e "Seçiminizi onaylamak için ${GREEN}ENTER${NC} veya ${GREEN}SPACE${NC} tuşuna basın." >&2
-        echo -e "${BLUE}-------------------------------------------------------${NC}" >&2
+        print_header "$title Sürüm Seçimi" "ENTER / SPACE ile seç" >&2
+        print_help_line "${YELLOW}↑/↓${NC} gezin  ${GREEN}ENTER/SPACE${NC} seç  ${YELLOW}←/q${NC} geri" >&2
+        print_separator "$BLUE" "-" >&2
 
         for i in "${!options[@]}"; do
             local marker=" "
@@ -396,7 +740,7 @@ show_version_submenu() {
             fi
         done
 
-        echo -e "${BLUE}-------------------------------------------------------${NC}" >&2
+        print_separator "$BLUE" "-" >&2
 
         local action
         action=$(read_keypress)
@@ -427,12 +771,9 @@ show_ai_submenu() {
 
     while true; do
         clear >&2
-        echo -e "${BLUE}=======================================================${NC}" >&2
-        echo -e "${BLUE}            Yapay Zeka Kodlama Araçları Seçimi         ${NC}" >&2
-        echo -e "${BLUE}=======================================================${NC}" >&2
-        echo -e "Klavye ${YELLOW}Yön Tuşları (↑/↓)${NC} ile gezinin." >&2
-        echo -e "Aracı seçmek/bırakmak için ${YELLOW}SPACE${NC} veya ${YELLOW}ENTER${NC}'a basın." >&2
-        echo -e "${BLUE}-------------------------------------------------------${NC}" >&2
+        print_header "Yapay Zeka Araçları" "Araç seçimi" >&2
+        print_help_line "${YELLOW}↑/↓${NC} gezin  ${GREEN}ENTER/SPACE${NC} seç/bırak  ${YELLOW}←/q${NC} geri" >&2
+        print_separator "$BLUE" "-" >&2
 
         for i in "${!AI_NAMES[@]}"; do
             local marker=" "
@@ -447,13 +788,13 @@ show_ai_submenu() {
             fi
         done
 
-        echo -e "${BLUE}-------------------------------------------------------${NC}" >&2
+        print_separator "$BLUE" "-" >&2
         if [ $selected_idx -eq $save_idx ]; then
             echo -e "${CYAN}➔ ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
         else
             echo -e "   ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
         fi
-        echo -e "${BLUE}-------------------------------------------------------${NC}" >&2
+        print_separator "$BLUE" "-" >&2
 
         local action
         action=$(read_keypress)
@@ -485,12 +826,9 @@ show_app_submenu() {
 
     while true; do
         clear >&2
-        echo -e "${BLUE}=======================================================${NC}" >&2
-        echo -e "${BLUE}             Arayüzlü Uygulama Seçimi                  ${NC}" >&2
-        echo -e "${BLUE}=======================================================${NC}" >&2
-        echo -e "Klavye ${YELLOW}Yön Tuşları (↑/↓)${NC} ile gezinin." >&2
-        echo -e "Uygulamayı seçmek/bırakmak için ${YELLOW}SPACE${NC} veya ${YELLOW}ENTER${NC}'a basın." >&2
-        echo -e "${BLUE}-------------------------------------------------------${NC}" >&2
+        print_header "Arayüzlü Uygulamalar" "Cask seçimi" >&2
+        print_help_line "${YELLOW}↑/↓${NC} gezin  ${GREEN}ENTER/SPACE${NC} seç/bırak  ${YELLOW}←/q${NC} geri" >&2
+        print_separator "$BLUE" "-" >&2
 
         for i in {0..6}; do
             local marker=" "
@@ -505,13 +843,13 @@ show_app_submenu() {
             fi
         done
 
-        echo -e "${BLUE}-------------------------------------------------------${NC}" >&2
+        print_separator "$BLUE" "-" >&2
         if [ $selected_idx -eq 7 ]; then
             echo -e "${CYAN}➔ ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
         else
             echo -e "   ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
         fi
-        echo -e "${BLUE}-------------------------------------------------------${NC}" >&2
+        print_separator "$BLUE" "-" >&2
 
         local action
         action=$(read_keypress)
@@ -538,19 +876,20 @@ show_app_submenu() {
 }
 
 show_theme_submenu() {
-    local selected_idx=0
+    local selected_idx=$THEME_DEFAULT
     local num_themes=${#THEME_NAMES[@]}
     local total=$((num_themes + 1)) # themes + 1 "Kaydet ve Geri Dön"
 
     while true; do
+        local subtitle="Tema ve varsayılan profil"
+        if [ -n "$TERMINAL_DEFAULT_PROFILE" ]; then
+            subtitle="Varsayılan: $TERMINAL_DEFAULT_PROFILE"
+        fi
+
         clear >&2
-        echo -e "${BLUE}=======================================================${NC}" >&2
-        echo -e "${BLUE}             Terminal Tema & Özelleştirme              ${NC}" >&2
-        echo -e "${BLUE}=======================================================${NC}" >&2
-        echo -e "Klavye ${YELLOW}Yön Tuşları (↑/↓)${NC} ile gezinin." >&2
-        echo -e "Temayı kurmak için ${YELLOW}SPACE${NC} veya ${YELLOW}ENTER${NC} ile seçin/bırakın." >&2
-        echo -e "Seçili temayı varsayılan yapmak için ${PURPLE}'v'${NC} tuşuna basın." >&2
-        echo -e "${BLUE}-------------------------------------------------------${NC}" >&2
+        print_header "Terminal Tema Seçimi" "$subtitle" >&2
+        print_help_line "${YELLOW}↑/↓${NC} gezin  ${GREEN}ENTER/SPACE${NC} seç/bırak  ${PURPLE}v${NC} varsayılan" >&2
+        print_separator "$BLUE" "-" >&2
 
         for i in "${!THEME_NAMES[@]}"; do
             local marker=" "
@@ -563,20 +902,25 @@ show_theme_submenu() {
                 default_str=" ${PURPLE}(Varsayılan)${NC}"
             fi
 
+            local installed_str=""
+            if terminal_profile_installed "${THEME_NAMES[$i]}"; then
+                installed_str=" ${GREEN}(Yüklü)${NC}"
+            fi
+
             if [ $selected_idx -eq $i ]; then
-                echo -e "${CYAN}➔ [${marker}] ${THEME_LABELS[$i]}${default_str}${NC}" >&2
+                echo -e "${CYAN}➔ [${marker}] ${THEME_LABELS[$i]}${installed_str}${default_str}${NC}" >&2
             else
-                echo -e "   [${marker}] ${THEME_LABELS[$i]}${default_str}" >&2
+                echo -e "   [${marker}] ${THEME_LABELS[$i]}${installed_str}${default_str}" >&2
             fi
         done
 
-        echo -e "${BLUE}-------------------------------------------------------${NC}" >&2
+        print_separator "$BLUE" "-" >&2
         if [ $selected_idx -eq $num_themes ]; then
             echo -e "${CYAN}➔ ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
         else
             echo -e "   ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
         fi
-        echo -e "${BLUE}-------------------------------------------------------${NC}" >&2
+        print_separator "$BLUE" "-" >&2
 
         local action
         action=$(read_keypress)
@@ -606,6 +950,7 @@ show_theme_submenu() {
                         for k in "${!THEME_NAMES[@]}"; do
                             if [ ${THEME_SELECTIONS[$k]} -eq 1 ]; then
                                 THEME_DEFAULT=$k
+                                TERMINAL_DEFAULT_PROFILE="${THEME_NAMES[$k]}"
                                 break
                             fi
                         done
@@ -616,6 +961,7 @@ show_theme_submenu() {
                 if [ $selected_idx -ge 0 ] && [ $selected_idx -lt $num_themes ]; then
                     THEME_SELECTIONS[$selected_idx]=1
                     THEME_DEFAULT=$selected_idx
+                    TERMINAL_DEFAULT_PROFILE="${THEME_NAMES[$selected_idx]}"
                 fi
                 ;;
             "LEFT"|"QUIT")
@@ -646,119 +992,89 @@ toggle_all() {
     fi
 }
 
+render_menu_row() {
+    local idx="$1"
+    local label="$2"
+    local button="$3"
+    local check=" "
+    local prefix="   "
+    local clean_label="$label"
+    local padded_label
+
+    if [ ${SELECTIONS[$idx]} -eq 1 ]; then
+        check="${GREEN}${CHECK}${NC}"
+    fi
+
+    padded_label=$(printf "%-${MENU_LABEL_WIDTH}s" "$clean_label")
+
+    if [ $CURRENT_INDEX -eq $idx ] && [ "$FOCUS_SIDE" = "left" ]; then
+        prefix="${CYAN}➔${NC} "
+        echo -e "${prefix}[${check}] ${CYAN}${padded_label}${NC}${button}"
+    else
+        echo -e "${prefix}[${check}] ${padded_label}${button}"
+    fi
+}
+
+menu_button() {
+    local idx="$1"
+    local text="$2"
+
+    if [ $CURRENT_INDEX -eq $idx ] && [ "$FOCUS_SIDE" = "right" ]; then
+        echo " ${YELLOW}➔ [$text]${NC}"
+    else
+        echo "   ${CYAN}[$text]${NC}"
+    fi
+}
+
 render_menu() {
     clear
-    echo -e "${BLUE}=======================================================${NC}"
-    echo -e "${BLUE}        macOS Geliştirici Ortamı Kurulum Sihirbazı     ${NC}"
-    echo -e "${BLUE}=======================================================${NC}"
-    echo -e "Klavye ${YELLOW}Yön Tuşları (↑/↓)${NC} ile gezinin, ${YELLOW}SPACE${NC} veya ${YELLOW}ENTER${NC} ile seçimi değiştirin."
-    echo -e "Apps için ${YELLOW}➔ (Sağ)${NC} ile ${YELLOW}[ App Seç ]${NC}'e, Diller için ${YELLOW}[ Sürüm Seç ]${NC}'e, Starship için ise ${YELLOW}[ Tema Seç ]${NC}'e geçebilirsiniz."
-    echo -e "Yapay Zeka Araçları için ${YELLOW}➔ (Sağ)${NC} tuşuna basarak ${YELLOW}[ Araç Seç ]${NC}'e geçebilirsiniz."
-    echo -e "Hepsini seçmek/bırakmak için ${YELLOW}'a'${NC} tuşuna basabilirsiniz."
-    echo -e "Kuruluma başlamak için en alttaki ${GREEN}[ Kuruluma Başla ]${NC} seçeneğinde ${GREEN}ENTER${NC}'a basın."
-    echo -e "${BLUE}-------------------------------------------------------${NC}"
+    local selected_components
+    selected_components=$(count_selected "${SELECTIONS[@]}")
+
+    print_header "$APP_TITLE" "$APP_SUBTITLE"
+    print_help_line "Seçili bileşen: ${GREEN}$selected_components/${#CHOICES[@]}${NC}"
+    print_help_line "${YELLOW}↑/↓${NC} gezin  ${GREEN}ENTER/SPACE${NC} seç  ${YELLOW}→${NC} detay  ${YELLOW}a${NC} tümü  ${RED}q${NC} çıkış"
+    print_separator "$BLUE" "-"
 
     # Bileşen Listesi (0-10)
     for i in {0..10}; do
-        local check=" "
-        if [ ${SELECTIONS[$i]} -eq 1 ]; then
-            check="${GREEN}${CHECK}${NC}"
-        fi
-
         local label="${CHOICES[$i]}"
         local version_btn=""
 
         if [ $i -eq 2 ]; then
-            local selected_count=0
-            for val in "${APP_SELECTIONS[@]}"; do
-                selected_count=$((selected_count + val))
-            done
+            local selected_count
+            selected_count=$(count_selected "${APP_SELECTIONS[@]}")
             local total_apps=${#APP_NAMES[@]}
-            local clean_label="${CHOICES[$i]} ($selected_count/$total_apps)"
-            local padded_label
-            padded_label=$(printf "%-70s" "$clean_label")
-            label="${CHOICES[$i]} (${CYAN}$selected_count/$total_apps${NC})${padded_label:${#clean_label}}"
-
-            if [ $CURRENT_INDEX -eq 2 ] && [ "$FOCUS_SIDE" = "right" ]; then
-                version_btn=" ➔ ${YELLOW}[ App Seç ]${NC}"
-            else
-                version_btn="   ${CYAN}[ App Seç ]${NC}"
-            fi
+            label="${CHOICES[$i]} ($selected_count/$total_apps)"
+            version_btn=$(menu_button "$i" "App Seç")
         elif [ $i -eq 4 ]; then
-            local clean_label="${CHOICES[$i]} (v$SELECTED_RUBY_VERSION)"
-            local padded_label
-            padded_label=$(printf "%-70s" "$clean_label")
-            label="${CHOICES[$i]} (${CYAN}v$SELECTED_RUBY_VERSION${NC})${padded_label:${#clean_label}}"
-
-            if [ $CURRENT_INDEX -eq 4 ] && [ "$FOCUS_SIDE" = "right" ]; then
-                version_btn=" ➔ ${YELLOW}[ Sürüm Seç ]${NC}"
-            else
-                version_btn="   ${CYAN}[ Sürüm Seç ]${NC}"
-            fi
+            label="${CHOICES[$i]} (v$SELECTED_RUBY_VERSION)"
+            version_btn=$(menu_button "$i" "Sürüm Seç")
         elif [ $i -eq 5 ]; then
-            local clean_label="${CHOICES[$i]} (v$SELECTED_JAVA_VERSION)"
-            local padded_label
-            padded_label=$(printf "%-70s" "$clean_label")
-            label="${CHOICES[$i]} (${CYAN}v$SELECTED_JAVA_VERSION${NC})${padded_label:${#clean_label}}"
-
-            if [ $CURRENT_INDEX -eq 5 ] && [ "$FOCUS_SIDE" = "right" ]; then
-                version_btn=" ➔ ${YELLOW}[ Sürüm Seç ]${NC}"
-            else
-                version_btn="   ${CYAN}[ Sürüm Seç ]${NC}"
-            fi
+            label="${CHOICES[$i]} (v$SELECTED_JAVA_VERSION)"
+            version_btn=$(menu_button "$i" "Sürüm Seç")
         elif [ $i -eq 6 ]; then
-            local clean_label="${CHOICES[$i]} (v$SELECTED_FLUTTER_VERSION)"
-            local padded_label
-            padded_label=$(printf "%-70s" "$clean_label")
-            label="${CHOICES[$i]} (${CYAN}v$SELECTED_FLUTTER_VERSION${NC})${padded_label:${#clean_label}}"
-
-            if [ $CURRENT_INDEX -eq 6 ] && [ "$FOCUS_SIDE" = "right" ]; then
-                version_btn=" ➔ ${YELLOW}[ Sürüm Seç ]${NC}"
-            else
-                version_btn="   ${CYAN}[ Sürüm Seç ]${NC}"
-            fi
+            label="${CHOICES[$i]} (v$SELECTED_FLUTTER_VERSION)"
+            version_btn=$(menu_button "$i" "Sürüm Seç")
         elif [ $i -eq 9 ]; then
             local default_theme="${THEME_LABELS[$THEME_DEFAULT]}"
-            local clean_label="${CHOICES[$i]} ($default_theme)"
-            local padded_label
-            padded_label=$(printf "%-70s" "$clean_label")
-            label="${CHOICES[$i]} (${CYAN}$default_theme${NC})${padded_label:${#clean_label}}"
-
-            if [ $CURRENT_INDEX -eq 9 ] && [ "$FOCUS_SIDE" = "right" ]; then
-                version_btn=" ➔ ${YELLOW}[ Tema Seç ]${NC}"
-            else
-                version_btn="   ${CYAN}[ Tema Seç ]${NC}"
+            if [ -n "$TERMINAL_DEFAULT_PROFILE" ] && ! theme_index_for_profile "$TERMINAL_DEFAULT_PROFILE" >/dev/null; then
+                default_theme="$TERMINAL_DEFAULT_PROFILE"
             fi
+            label="${CHOICES[$i]} ($default_theme)"
+            version_btn=$(menu_button "$i" "Tema Seç")
         elif [ $i -eq 10 ]; then
-            local selected_count=0
-            for val in "${AI_SELECTIONS[@]}"; do
-                selected_count=$((selected_count + val))
-            done
+            local selected_count
+            selected_count=$(count_selected "${AI_SELECTIONS[@]}")
             local total_ai=${#AI_NAMES[@]}
-            local clean_label="${CHOICES[$i]} ($selected_count/$total_ai)"
-            local padded_label
-            padded_label=$(printf "%-70s" "$clean_label")
-            label="${CHOICES[$i]} (${CYAN}$selected_count/$total_ai${NC})${padded_label:${#clean_label}}"
-
-            if [ $CURRENT_INDEX -eq 10 ] && [ "$FOCUS_SIDE" = "right" ]; then
-                version_btn=" ➔ ${YELLOW}[ Araç Seç ]${NC}"
-            else
-                version_btn="   ${CYAN}[ Araç Seç ]${NC}"
-            fi
+            label="${CHOICES[$i]} ($selected_count/$total_ai)"
+            version_btn=$(menu_button "$i" "Araç Seç")
         fi
 
-        if [ $CURRENT_INDEX -eq $i ]; then
-            if [ "$FOCUS_SIDE" = "left" ]; then
-                echo -e "${CYAN}➔ [${check}] ${label}${NC}${version_btn}"
-            else
-                echo -e "   [${check}] ${label}${version_btn}"
-            fi
-        else
-            echo -e "   [${check}] ${label}${version_btn}"
-        fi
+        render_menu_row "$i" "$label" "$version_btn"
     done
 
-    echo -e "${BLUE}-------------------------------------------------------${NC}"
+    print_separator "$BLUE" "-"
 
     # Aksiyonlar (11-12)
     if [ $CURRENT_INDEX -eq 11 ]; then
@@ -773,10 +1089,11 @@ render_menu() {
         echo -e "   ${RED}[ İptal Et ve Çık ]${NC}"
     fi
 
-    echo -e "${BLUE}-------------------------------------------------------${NC}"
+    print_separator "$BLUE" "-"
 }
 
 # İnteraktif Döngü
+sync_theme_state_from_terminal
 while true; do
     render_menu
     action=$(read_keypress)
@@ -827,12 +1144,7 @@ while true; do
                 FOCUS_SIDE="left"
             elif [ $CURRENT_INDEX -eq 4 ] && [ "$FOCUS_SIDE" = "right" ]; then
                 # Ruby Versiyon Alt Menüsü
-                clear
-                echo -e "${BLUE}=======================================================${NC}"
-                echo -e "${BLUE}        macOS Geliştirici Ortamı Kurulum Sihirbazı     ${NC}"
-                echo -e "${BLUE}=======================================================${NC}"
-                echo -e "\n${YELLOW}Kurulabilir Ruby sürümleri listeleniyor... ⏳${NC}\n"
-                echo -e "${BLUE}-------------------------------------------------------${NC}"
+                print_loading_header "Kurulabilir Ruby sürümleri listeleniyor..."
 
                 ruby_vers=("${FALLBACK_RUBY_VERSIONS[@]}")
                 result=$(show_version_submenu "Ruby" "$SELECTED_RUBY_VERSION" "${ruby_vers[@]}")
@@ -841,12 +1153,7 @@ while true; do
                 FOCUS_SIDE="left"
             elif [ $CURRENT_INDEX -eq 5 ] && [ "$FOCUS_SIDE" = "right" ]; then
                 # Java Versiyon Alt Menüsü
-                clear
-                echo -e "${BLUE}=======================================================${NC}"
-                echo -e "${BLUE}        macOS Geliştirici Ortamı Kurulum Sihirbazı     ${NC}"
-                echo -e "${BLUE}=======================================================${NC}"
-                echo -e "\n${YELLOW}Kurulabilir Java (JDK) sürümleri listeleniyor... ⏳${NC}\n"
-                echo -e "${BLUE}-------------------------------------------------------${NC}"
+                print_loading_header "Kurulabilir Java (JDK) sürümleri listeleniyor..."
 
                 java_vers=("${FALLBACK_JAVA_VERSIONS[@]}")
                 result=$(show_version_submenu "Java" "$SELECTED_JAVA_VERSION" "${java_vers[@]}")
@@ -855,12 +1162,7 @@ while true; do
                 FOCUS_SIDE="left"
             elif [ $CURRENT_INDEX -eq 6 ] && [ "$FOCUS_SIDE" = "right" ]; then
                 # Flutter Versiyon Alt Menüsü
-                clear
-                echo -e "${BLUE}=======================================================${NC}"
-                echo -e "${BLUE}        macOS Geliştirici Ortamı Kurulum Sihirbazı     ${NC}"
-                echo -e "${BLUE}=======================================================${NC}"
-                echo -e "\n${YELLOW}Resmi Git deposundan kararlı Flutter sürümleri sorgulanıyor... ⏳${NC}\n"
-                echo -e "${BLUE}-------------------------------------------------------${NC}"
+                print_loading_header "Resmi Git deposundan kararlı Flutter sürümleri sorgulanıyor..."
 
                 flutter_vers=()
                 while IFS= read -r line; do
@@ -896,12 +1198,7 @@ while true; do
                 FOCUS_SIDE="left"
             elif [ $CURRENT_INDEX -eq 4 ] && [ "$FOCUS_SIDE" = "right" ]; then
                 # Ruby Versiyon Alt Menüsü (Sağ taraftayken SPACE basılırsa)
-                clear
-                echo -e "${BLUE}=======================================================${NC}"
-                echo -e "${BLUE}        macOS Geliştirici Ortamı Kurulum Sihirbazı     ${NC}"
-                echo -e "${BLUE}=======================================================${NC}"
-                echo -e "\n${YELLOW}Kurulabilir Ruby sürümleri listeleniyor... ⏳${NC}\n"
-                echo -e "${BLUE}-------------------------------------------------------${NC}"
+                print_loading_header "Kurulabilir Ruby sürümleri listeleniyor..."
 
                 ruby_vers=("${FALLBACK_RUBY_VERSIONS[@]}")
                 result=$(show_version_submenu "Ruby" "$SELECTED_RUBY_VERSION" "${ruby_vers[@]}")
@@ -910,12 +1207,7 @@ while true; do
                 FOCUS_SIDE="left"
             elif [ $CURRENT_INDEX -eq 5 ] && [ "$FOCUS_SIDE" = "right" ]; then
                 # Java Versiyon Alt Menüsü (Sağ taraftayken SPACE basılırsa)
-                clear
-                echo -e "${BLUE}=======================================================${NC}"
-                echo -e "${BLUE}        macOS Geliştirici Ortamı Kurulum Sihirbazı     ${NC}"
-                echo -e "${BLUE}=======================================================${NC}"
-                echo -e "\n${YELLOW}Kurulabilir Java (JDK) sürümleri listeleniyor... ⏳${NC}\n"
-                echo -e "${BLUE}-------------------------------------------------------${NC}"
+                print_loading_header "Kurulabilir Java (JDK) sürümleri listeleniyor..."
 
                 java_vers=("${FALLBACK_JAVA_VERSIONS[@]}")
                 result=$(show_version_submenu "Java" "$SELECTED_JAVA_VERSION" "${java_vers[@]}")
@@ -924,12 +1216,7 @@ while true; do
                 FOCUS_SIDE="left"
             elif [ $CURRENT_INDEX -eq 6 ] && [ "$FOCUS_SIDE" = "right" ]; then
                 # Flutter Versiyon Alt Menüsü (Sağ taraftayken SPACE basılırsa)
-                clear
-                echo -e "${BLUE}=======================================================${NC}"
-                echo -e "${BLUE}        macOS Geliştirici Ortamı Kurulum Sihirbazı     ${NC}"
-                echo -e "${BLUE}=======================================================${NC}"
-                echo -e "\n${YELLOW}Resmi Git deposundan kararlı Flutter sürümleri sorgulanıyor... ⏳${NC}\n"
-                echo -e "${BLUE}-------------------------------------------------------${NC}"
+                print_loading_header "Resmi Git deposundan kararlı Flutter sürümleri sorgulanıyor..."
 
                 flutter_vers=()
                 while IFS= read -r line; do
@@ -970,8 +1257,8 @@ done
 
 tput cnorm # Kurulum başlarken imleci geri getir
 clear
-echo -e "${GREEN}Seçimleriniz alındı! Kurulum başlıyor...${NC}"
-echo -e "${BLUE}=======================================================${NC}\n"
+print_header "$APP_TITLE" "Kurulum Başlıyor"
+echo -e "  ${GREEN}Seçimleriniz alındı. Seçili adımlar uygulanıyor.${NC}\n"
 
 # 1. Sistem Gereksinimleri
 if [ ${SELECTIONS[0]} -eq 1 ]; then
@@ -1175,13 +1462,11 @@ if [ ${SELECTIONS[6]} -eq 1 ]; then
     yes | flutter doctor --android-licenses >/dev/null 2>&1 || true
     flutter doctor || true
 
-    echo -e "${BLUE}==========================================================================${NC}"
-    echo -e "DİKKAT: Android SDK eksik hatası alıyorsanız, uygulamalar klasöründeki"
-    echo -e "Android Studio'yu BİR KERE AÇIP, varsayılan Android SDK'sının inmesini"
-    echo -e "beklemelisiniz. Ardından lisans hatası almamak için terminalde:"
-    echo -e "flutter doctor --android-licenses"
-    echo -e "komutunu çalıştırabilirsiniz."
-    echo -e "${BLUE}==========================================================================${NC}"
+    print_separator "$BLUE" "-"
+    echo -e "  ${YELLOW}DİKKAT:${NC} Android SDK eksikse Android Studio'yu bir kez açıp"
+    echo -e "  varsayılan SDK indirmesini tamamlayın. Ardından çalıştırın:"
+    echo -e "  ${CYAN}flutter doctor --android-licenses${NC}"
+    print_separator "$BLUE" "-"
     echo -e "${GREEN}✓ Flutter kurulumu tamamlandı.${NC}\n"
 fi
 
@@ -1252,67 +1537,96 @@ if [ ${SELECTIONS[9]} -eq 1 ]; then
         if [ ${THEME_SELECTIONS[$i]} -eq 1 ]; then
             theme_name=""
             theme_url=""
+            theme_url_alt=""
             theme_file=""
+            expected_profile_name=""
 
             case $i in
                 0)
                     theme_name="Gruvbox-dark"
                     theme_url="https://raw.githubusercontent.com/morhetz/gruvbox-contrib/master/osx-terminal/Gruvbox-dark.terminal"
                     theme_file="Gruvbox-dark.terminal"
+                    expected_profile_name="Gruvbox-dark"
                     ;;
                 1)
                     theme_name="Dracula"
                     theme_url="https://raw.githubusercontent.com/dracula/terminal-app/main/Dracula.terminal"
                     theme_file="Dracula.terminal"
+                    expected_profile_name="Dracula"
                     ;;
                 2)
                     theme_name="Nord"
                     theme_url="https://raw.githubusercontent.com/nordtheme/terminal-app/refs/heads/develop/src/xml/Nord.terminal"
                     theme_file="Nord.terminal"
+                    expected_profile_name="Nord"
                     ;;
                 3)
-                    theme_name="Solarized Dark"
+                    theme_name="Solarized Dark ansi"
                     theme_url="https://raw.githubusercontent.com/altercation/solarized/master/osx-terminal.app-colors-solarized/Solarized%20Dark%20ansi.terminal"
                     theme_file="Solarized-Dark.terminal"
+                    expected_profile_name="Solarized-Dark"
                     ;;
                 4)
                     theme_name="rose-pine"
                     theme_url="https://raw.githubusercontent.com/rose-pine/terminal.app/main/rose-pine.terminal"
                     theme_file="rose-pine.terminal"
+                    expected_profile_name="rose-pine"
                     ;;
                 5)
                     theme_name="Monokai"
                     theme_url="https://raw.githubusercontent.com/stephenway/monokai.terminal/master/Monokai.terminal"
                     theme_file="Monokai.terminal"
+                    expected_profile_name="Monokai"
                     ;;
                 6)
                     theme_name="One Dark"
                     theme_url="https://raw.githubusercontent.com/nathanbuchar/atom-one-dark-terminal/master/scheme/terminal/One%20Dark.terminal"
+                    theme_url_alt="https://github.com/nathanbuchar/atom-one-dark-terminal/raw/master/scheme/terminal/One%20Dark.terminal"
                     theme_file="One-Dark.terminal"
+                    expected_profile_name="One-Dark"
                     ;;
                 7)
                     theme_name="tokyo-night"
                     theme_url="https://raw.githubusercontent.com/l3olton/tokyo-night.terminal/main/tokyo-night.terminal"
                     theme_file="tokyo-night.terminal"
+                    expected_profile_name="tokyo-night"
                     ;;
             esac
 
             theme_path="$HOME/$theme_file"
-            if [ -f "$theme_path" ]; then
-                echo "[$theme_name] zaten yüklü, indirme atlanıyor..."
+            if [ ! -f "$theme_path" ]; then
+                download_theme_file "$theme_path" "$theme_name" "$theme_url" "$theme_url_alt" || record_failure "$theme_name tema indirme"
+            elif terminal_profile_exists "$expected_profile_name"; then
+                echo "[$expected_profile_name] Terminal profili zaten yüklü."
             else
-                echo "[$theme_name] terminal renk profili indiriliyor..."
-                curl -fsSL "$theme_url" -o "$theme_path" || record_failure "$theme_name tema indirme"
+                echo "[$theme_name] dosyası mevcut, Terminal profiline aktarılacak..."
             fi
 
             if [[ -f "$theme_path" ]]; then
-                terminal_profile_name=$(read_terminal_profile_name "$theme_path" "$theme_name")
+                if ! set_terminal_profile_file_name "$theme_path" "$expected_profile_name"; then
+                    echo -e "${YELLOW}! $theme_name dosyasındaki profil adı güncellenemedi, mevcut ad kullanılacak.${NC}"
+                fi
+                terminal_profile_name=$(read_terminal_profile_name "$theme_path" "$expected_profile_name")
 
                 if import_terminal_profile "$theme_path" "$terminal_profile_name"; then
                     echo -e "${GREEN}✓ $terminal_profile_name profili Terminal'e aktarıldı.${NC}"
                 else
-                    record_failure "$theme_name tema import"
-                    echo -e "${YELLOW}! $terminal_profile_name profili Terminal'de doğrulanamadı.${NC}"
+                    echo -e "${YELLOW}! $terminal_profile_name profili doğrulanamadı, tema dosyası yenileniyor...${NC}"
+                    if download_theme_file "$theme_path" "$theme_name" "$theme_url" "$theme_url_alt"; then
+                        if ! set_terminal_profile_file_name "$theme_path" "$expected_profile_name"; then
+                            echo -e "${YELLOW}! $theme_name dosyasındaki profil adı güncellenemedi, mevcut ad kullanılacak.${NC}"
+                        fi
+                        terminal_profile_name=$(read_terminal_profile_name "$theme_path" "$expected_profile_name")
+                        if import_terminal_profile "$theme_path" "$terminal_profile_name"; then
+                            echo -e "${GREEN}✓ $terminal_profile_name profili yeniden indirildi ve aktarıldı.${NC}"
+                        else
+                            record_failure "$theme_name tema import"
+                            echo -e "${YELLOW}! $terminal_profile_name profili Terminal'de doğrulanamadı.${NC}"
+                        fi
+                    else
+                        record_failure "$theme_name tema yenileme"
+                        echo -e "${YELLOW}! $theme_name tema dosyası yenilenemedi.${NC}"
+                    fi
                 fi
 
                 if [ $THEME_DEFAULT -eq $i ]; then
@@ -1337,8 +1651,7 @@ if [ ${SELECTIONS[9]} -eq 1 ]; then
     fi
 
     echo "Varsayılan tema '$default_theme_name' olarak ayarlanıyor..."
-    defaults write com.apple.Terminal "Default Window Settings" -string "$default_theme_name"
-    defaults write com.apple.Terminal "Startup Window Settings" -string "$default_theme_name"
+    set_terminal_default_profile "$default_theme_name"
 
     # Aktif terminal pencerelerini/sekmelerini seçilen varsayılan temaya geçir (AppleScript ile canlı geçiş)
     echo "Terminal canlı teması '$default_theme_name' olarak güncelleniyor..."
@@ -1359,13 +1672,18 @@ eval "$(starship init zsh)"'
     append_once "$ZSHRC_FILE" "alias clear=" '# Clear command that also clears the scrollback buffer
 alias clear="clear && printf '\''\e[3J'\''"'
 
+    # macOS login banner'ındaki "Last login" satırını gizle
+    echo "Terminal açılışındaki Last login mesajı gizleniyor..."
+    touch "$HOME/.hushlogin" || record_failure "Terminal Last login mesajını gizleme"
+
     # Starship Teması Preset Oluşturulması
     echo "Starship varsayılan teması ($starship_preset) kontrol ediliyor..."
     mkdir -p "$HOME/.config"
     if [ -f "$HOME/.config/starship.toml" ]; then
-        echo "✓ Mevcut starship.toml bulundu, üzerine yazılmadı."
+        update_starship_palette "$HOME/.config/starship.toml" "$default_theme_name" || record_failure "Starship renk paleti güncelleme"
     else
         starship preset "$starship_preset" -o "$HOME/.config/starship.toml" || record_failure "Starship preset oluşturma"
+        update_starship_palette "$HOME/.config/starship.toml" "$default_theme_name" || record_failure "Starship renk paleti güncelleme"
     fi
     echo -e "${GREEN}✓ Terminal özelleştirmeleri başarıyla uygulandı.${NC}\n"
 fi
@@ -1431,14 +1749,12 @@ defaults write NSGlobalDomain InitialKeyRepeat -int 15
 
 print_failure_summary
 
-echo -e "\n${GREEN}=======================================================${NC}"
+echo
 if [ ${#FAILED_STEPS[@]} -eq 0 ]; then
-    echo -e "${GREEN}        TÜM SEÇİLİ KURULUMLAR TAMAMLANDI! 🎉          ${NC}"
+    print_header "Kurulum Tamamlandı" "Tüm seçili adımlar başarıyla bitti"
 else
-    echo -e "${YELLOW}        KURULUM TAMAMLANDI, BAZI ADIMLAR KONTROL İSTİYOR${NC}"
+    print_header "Kurulum Tamamlandı" "Bazı adımlar kontrol istiyor"
 fi
-echo -e "${GREEN}=======================================================${NC}"
-echo -e "${BLUE}Yeni kurulan dillerin, path ayarlarının ve terminal ${NC}"
-echo -e "${BLUE}tasarımının aktif olması için terminali kapatıp açın  ${NC}"
-echo -e "${BLUE}veya 'source ~/.zshrc' komutunu çalıştırın.           ${NC}"
-echo -e "${BLUE}=======================================================${NC}"
+echo -e "  ${BLUE}Yeni PATH ve terminal ayarları için terminali yeniden açın.${NC}"
+echo -e "  ${BLUE}Alternatif: ${CYAN}source ~/.zshrc${NC}"
+print_separator "$BLUE" "-"
