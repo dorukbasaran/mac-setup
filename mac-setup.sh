@@ -17,7 +17,8 @@ FAILED_STEPS=()
 APP_TITLE="macOS Geliştirici Ortamı"
 APP_SUBTITLE="İnteraktif Kurulum Sihirbazı"
 UI_WIDTH=72
-MENU_LABEL_WIDTH=68
+MENU_LABEL_WIDTH=50
+CLEAR_LINE='\033[K'
 
 # Seçilen Varsayılan Versiyonlar
 SELECTED_FLUTTER_VERSION="stable"
@@ -92,21 +93,28 @@ CHOICES=(
     "Rust & Cargo Geliştirme Ortamı"
     "Node.js & Web Geliştirme Ortamı (NVM, Yarn, pnpm)"
     "Terminal Özelleştirme & Starship Entegrasyonu"
-    "Yapay Zeka Kodlama Araçları (Codex, Copilot, Antigravity, OpenCode)"
+    "Yapay Zeka Kodlama Araçları (Codex, Claude Code, Copilot, Antigravity, OpenCode)"
 )
 
 # Seçim durumları (1: seçili, 0: değil)
 SELECTIONS=(1 1 1 1 1 1 1 1 1 1 1)
 
 # Arayüzlü Uygulamalar (Casks)
-APP_NAMES=("docker" "postman" "ollama" "zed" "spotify" "android-studio" "rectangle")
-APP_LABELS=("Docker" "Postman" "Ollama" "Zed Editor" "Spotify" "Android Studio" "Rectangle (Window Manager)")
-APP_SELECTIONS=(1 1 1 1 1 1 1) # Varsayılan olarak hepsi seçili
+APP_NAMES=("docker" "postman" "ollama" "zed" "spotify" "android-studio" "rectangle" "youtype")
+APP_LABELS=("Docker" "Postman" "Ollama" "Zed Editor" "Spotify" "Android Studio" "Rectangle (Window Manager)" "YouType")
+APP_SELECTIONS=(1 1 1 1 1 1 1 1) # Varsayılan olarak hepsi seçili
+APP_STATUS_LABELS=()
+
+# Terminal Araçları (Brew Formula)
+TERMINAL_TOOL_NAMES=("jq" "yq" "tree" "watch" "ripgrep" "fd" "fzf" "bat" "eza" "htop" "fastfetch" "nerdfetch" "tmux")
+TERMINAL_TOOL_LABELS=("jq" "yq" "tree" "watch" "ripgrep (rg)" "fd" "fzf" "bat" "eza" "htop" "fastfetch" "nerdfetch" "tmux")
+TERMINAL_TOOL_SELECTIONS=(1 1 1 1 1 1 1 1 1 1 1 1 1)
+TERMINAL_TOOL_STATUS_LABELS=()
 
 # Yapay Zeka Kodlama Araçları
-AI_NAMES=("codex" "copilot-cli" "antigravity" "opencode")
-AI_LABELS=("Codex CLI (OpenAI)" "GitHub Copilot CLI" "Antigravity CLI (Google)" "OpenCode (AnomalyCo)")
-AI_SELECTIONS=(1 1 1 1) # Varsayılan olarak hepsi seçili
+AI_NAMES=("codex" "claude-code" "copilot-cli" "antigravity" "opencode")
+AI_LABELS=("Codex CLI (OpenAI)" "Claude Code (Anthropic)" "GitHub Copilot CLI" "Antigravity CLI (Google)" "OpenCode (AnomalyCo)")
+AI_SELECTIONS=(1 1 1 1 1) # Varsayılan olarak hepsi seçili
 
 # Temalar
 THEME_NAMES=("Gruvbox-dark" "Dracula" "Nord" "Solarized-Dark" "rose-pine" "Monokai" "One-Dark" "tokyo-night")
@@ -118,6 +126,7 @@ TERMINAL_DEFAULT_PROFILE=""
 CURRENT_INDEX=0
 FOCUS_SIDE="left"
 TOTAL_ITEMS=13 # 11 bileşen + 2 aksiyon
+UI_FIRST_RENDER=1
 
 # İmleç Kontrolü ve Temizleme
 cleanup_cursor() {
@@ -125,6 +134,23 @@ cleanup_cursor() {
 }
 trap cleanup_cursor EXIT
 tput civis # İmleci gizle
+
+begin_tui_render() {
+    if [ "$UI_FIRST_RENDER" -eq 1 ]; then
+        clear
+        UI_FIRST_RENDER=0
+    else
+        printf '\033[H'
+    fi
+}
+
+end_tui_render() {
+    printf '\033[J'
+}
+
+print_tui_line() {
+    printf "%b${CLEAR_LINE}\n" "$1"
+}
 
 record_failure() {
     FAILED_STEPS+=("$1")
@@ -140,6 +166,24 @@ append_once() {
     if ! grep -Fq "$marker" "$target_file"; then
         printf "\n%s\n" "$content" >> "$target_file"
     fi
+}
+
+configure_clear_alias() {
+    local target_file="$1"
+    local tmp_file
+
+    touch "$target_file"
+    tmp_file="${target_file}.tmp.$$"
+
+    awk '
+        $0 == "# Clear command that also clears the scrollback buffer" { skip_clear_alias = 1; next }
+        skip_clear_alias && $0 ~ /^alias clear=/ { skip_clear_alias = 0; next }
+        { skip_clear_alias = 0; print }
+    ' "$target_file" > "$tmp_file" && mv "$tmp_file" "$target_file"
+
+    append_once "$target_file" "# mac-setup clear scrollback alias" '# mac-setup clear scrollback alias
+# Clears the visible screen and scrollback without changing shell history.
+alias clear='\''command clear && printf "\033[3J"'\'''
 }
 
 brew_shellenv_line() {
@@ -217,7 +261,7 @@ repeat_char() {
 print_separator() {
     local color="${1:-$BLUE}"
     local char="${2:--}"
-    echo -e "${color}$(repeat_char "$char" "$UI_WIDTH")${NC}"
+    print_tui_line "${color}$(repeat_char "$char" "$UI_WIDTH")${NC}"
 }
 
 print_centered() {
@@ -230,7 +274,7 @@ print_centered() {
         pad=0
     fi
 
-    printf "%b%*s%s%b\n" "$color" "$pad" "" "$text" "$NC"
+    printf "%b%*s%s%b%b\n" "$color" "$pad" "" "$text" "$NC" "$CLEAR_LINE"
 }
 
 print_header() {
@@ -246,7 +290,7 @@ print_header() {
 }
 
 print_help_line() {
-    echo -e "  $1"
+    print_tui_line "  $1"
 }
 
 print_loading_header() {
@@ -266,6 +310,148 @@ count_selected() {
         sum=$((sum + val))
     done
     echo "$sum"
+}
+
+get_app_path() {
+    local cask="$1"
+    local path
+    local candidates=()
+
+    case "$cask" in
+        "docker") candidates=("/Applications/Docker.app" "$HOME/Applications/Docker.app") ;;
+        "postman") candidates=("/Applications/Postman.app" "$HOME/Applications/Postman.app") ;;
+        "ollama") candidates=("/Applications/Ollama.app" "$HOME/Applications/Ollama.app") ;;
+        "zed") candidates=("/Applications/Zed.app" "$HOME/Applications/Zed.app") ;;
+        "spotify") candidates=("/Applications/Spotify.app" "$HOME/Applications/Spotify.app") ;;
+        "android-studio") candidates=("/Applications/Android Studio.app" "$HOME/Applications/Android Studio.app") ;;
+        "rectangle") candidates=("/Applications/Rectangle.app" "$HOME/Applications/Rectangle.app") ;;
+        "youtype") candidates=("/Applications/YouType.app" "$HOME/Applications/YouType.app") ;;
+    esac
+
+    for path in "${candidates[@]}"; do
+        if [ -d "$path" ]; then
+            echo "$path"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+app_command_for_cask() {
+    local cask="$1"
+
+    case "$cask" in
+        "docker") echo "docker" ;;
+        "postman") echo "postman" ;;
+        "ollama") echo "ollama" ;;
+        "zed") echo "zed" ;;
+        "android-studio") echo "studio" ;;
+        "rectangle") echo "rectangle" ;;
+        "youtype") echo "YouType" ;;
+        *) return 1 ;;
+    esac
+}
+
+read_app_version() {
+    local app_path="$1"
+    local version
+
+    version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$app_path/Contents/Info.plist" 2>/dev/null)
+    if [ -z "$version" ]; then
+        version=$(defaults read "$app_path/Contents/Info" CFBundleShortVersionString 2>/dev/null)
+    fi
+    if [ -z "$version" ]; then
+        version=$(mdls -raw -name kMDItemVersion "$app_path" 2>/dev/null)
+        if [ "$version" = "(null)" ]; then
+            version=""
+        fi
+    fi
+
+    echo "$version"
+}
+
+app_installed_version() {
+    local cask="$1"
+    local app_path
+    local command_name
+    local version
+
+    if app_path=$(get_app_path "$cask"); then
+        read_app_version "$app_path"
+        return 0
+    fi
+
+    if brew list --cask "$cask" >/dev/null 2>&1; then
+        version=$(brew list --cask --versions "$cask" 2>/dev/null | awk '{print $2}')
+        echo "$version"
+        return 0
+    fi
+
+    if command_name=$(app_command_for_cask "$cask") && command -v "$command_name" >/dev/null 2>&1; then
+        version=$("$command_name" --version 2>/dev/null | head -n 1)
+        echo "$version"
+        return 0
+    fi
+
+    return 1
+}
+
+app_status_label() {
+    local cask="$1"
+    local selected="${2:-1}"
+    local version
+
+    if version=$(app_installed_version "$cask"); then
+        if [ -n "$version" ]; then
+            echo "v$version"
+        else
+            echo "Yüklü"
+        fi
+    elif [ "$selected" -eq 1 ]; then
+        echo "Seçili"
+    else
+        echo "Kontrol edilemedi"
+    fi
+}
+
+refresh_app_status_cache() {
+    local i
+
+    APP_STATUS_LABELS=()
+    for i in "${!APP_NAMES[@]}"; do
+        APP_STATUS_LABELS[$i]=$(app_status_label "${APP_NAMES[$i]}" "${APP_SELECTIONS[$i]}")
+    done
+}
+
+terminal_tool_status_label() {
+    local tool="$1"
+
+    if command -v "$tool" >/dev/null 2>&1 || brew list --formula "$tool" >/dev/null 2>&1; then
+        echo " ${GREEN}(Yüklü)${NC}"
+    else
+        echo ""
+    fi
+}
+
+refresh_terminal_tool_status_cache() {
+    local i
+
+    TERMINAL_TOOL_STATUS_LABELS=()
+    for i in "${!TERMINAL_TOOL_NAMES[@]}"; do
+        TERMINAL_TOOL_STATUS_LABELS[$i]=$(terminal_tool_status_label "${TERMINAL_TOOL_NAMES[$i]}")
+    done
+}
+
+truncate_text() {
+    local text="$1"
+    local max_len="$2"
+
+    if [ ${#text} -gt "$max_len" ]; then
+        printf "%s..." "${text:0:$((max_len - 3))}"
+    else
+        printf "%s" "$text"
+    fi
 }
 
 terminal_profile_exists() {
@@ -298,6 +484,38 @@ theme_index_for_profile() {
     return 1
 }
 
+set_theme_default() {
+    local idx="$1"
+
+    THEME_DEFAULT=$idx
+    THEME_SELECTIONS[$idx]=1
+    TERMINAL_DEFAULT_PROFILE="${THEME_NAMES[$idx]}"
+}
+
+selected_theme_count() {
+    local sum=0
+    local val
+
+    for val in "${THEME_SELECTIONS[@]}"; do
+        sum=$((sum + val))
+    done
+
+    echo "$sum"
+}
+
+set_first_selected_theme_as_default() {
+    local i
+
+    for i in "${!THEME_NAMES[@]}"; do
+        if [ ${THEME_SELECTIONS[$i]} -eq 1 ]; then
+            set_theme_default "$i"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 sync_theme_state_from_terminal() {
     local installed_count=0
     local default_profile
@@ -318,10 +536,10 @@ sync_theme_state_from_terminal() {
     fi
 
     default_profile=$(defaults read com.apple.Terminal "Default Window Settings" 2>/dev/null || true)
-    TERMINAL_DEFAULT_PROFILE="$default_profile"
     if default_idx=$(theme_index_for_profile "$default_profile"); then
-        THEME_DEFAULT=$default_idx
-        THEME_SELECTIONS[$THEME_DEFAULT]=1
+        set_theme_default "$default_idx"
+    else
+        set_first_selected_theme_as_default
     fi
 }
 
@@ -678,9 +896,15 @@ fetch_ruby_versions() {
 read_keypress() {
     local key
     if [ -n "$ZSH_VERSION" ]; then
-        read -r -s -k 1 key
+        if ! read -r -s -k 1 key; then
+            echo "QUIT"
+            return 0
+        fi
     else
-        read -r -s -n 1 key
+        if ! read -r -s -n 1 key; then
+            echo "QUIT"
+            return 0
+        fi
     fi
 
     if [[ $key == $'\x1b' ]]; then
@@ -736,7 +960,7 @@ show_version_submenu() {
     done
 
     while true; do
-        clear >&2
+        begin_tui_render >&2
         print_header "$title Sürüm Seçimi" "ENTER / SPACE ile seç" >&2
         print_help_line "${YELLOW}↑/↓${NC} gezin  ${GREEN}ENTER/SPACE${NC} seç  ${YELLOW}←/q${NC} geri" >&2
         print_separator "$BLUE" "-" >&2
@@ -748,13 +972,14 @@ show_version_submenu() {
             fi
 
             if [ $selected_idx -eq $i ]; then
-                echo -e "${CYAN}➔ [${marker}] ${options[$i]}${NC}" >&2
+                print_tui_line "${CYAN}➔ [${marker}] ${options[$i]}${NC}" >&2
             else
-                echo -e "   [${marker}] ${options[$i]}" >&2
+                print_tui_line "   [${marker}] ${options[$i]}" >&2
             fi
         done
 
         print_separator "$BLUE" "-" >&2
+        end_tui_render >&2
 
         local action
         action=$(read_keypress)
@@ -784,7 +1009,7 @@ show_ai_submenu() {
     local save_idx=${#AI_NAMES[@]}
 
     while true; do
-        clear >&2
+        begin_tui_render >&2
         print_header "Yapay Zeka Araçları" "Araç seçimi" >&2
         print_help_line "${YELLOW}↑/↓${NC} gezin  ${GREEN}ENTER/SPACE${NC} seç/bırak  ${YELLOW}←/q${NC} geri" >&2
         print_separator "$BLUE" "-" >&2
@@ -796,19 +1021,20 @@ show_ai_submenu() {
             fi
 
             if [ $selected_idx -eq $i ]; then
-                echo -e "${CYAN}➔ [${marker}] ${AI_LABELS[$i]}${NC}" >&2
+                print_tui_line "${CYAN}➔ [${marker}] ${AI_LABELS[$i]}${NC}" >&2
             else
-                echo -e "   [${marker}] ${AI_LABELS[$i]}" >&2
+                print_tui_line "   [${marker}] ${AI_LABELS[$i]}" >&2
             fi
         done
 
         print_separator "$BLUE" "-" >&2
         if [ $selected_idx -eq $save_idx ]; then
-            echo -e "${CYAN}➔ ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
+            print_tui_line "${CYAN}➔ ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
         else
-            echo -e "   ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
+            print_tui_line "   ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
         fi
         print_separator "$BLUE" "-" >&2
+        end_tui_render >&2
 
         local action
         action=$(read_keypress)
@@ -836,34 +1062,44 @@ show_ai_submenu() {
 
 show_app_submenu() {
     local selected_idx=0
-    local total=8 # 7 uygulamalar + 1 "Kaydet ve Geri Dön"
+    local total=$((${#APP_NAMES[@]} + 1))
+    local save_idx=${#APP_NAMES[@]}
+
+    print_loading_header "Uygulama durumları kontrol ediliyor..."
+    refresh_app_status_cache
 
     while true; do
-        clear >&2
+        begin_tui_render >&2
         print_header "Arayüzlü Uygulamalar" "Cask seçimi" >&2
         print_help_line "${YELLOW}↑/↓${NC} gezin  ${GREEN}ENTER/SPACE${NC} seç/bırak  ${YELLOW}←/q${NC} geri" >&2
         print_separator "$BLUE" "-" >&2
 
-        for i in {0..6}; do
+        for i in "${!APP_NAMES[@]}"; do
             local marker=" "
+            local status
+            local row_label
             if [ ${APP_SELECTIONS[$i]} -eq 1 ]; then
                 marker="${GREEN}${CHECK}${NC}"
             fi
 
+            status="${APP_STATUS_LABELS[$i]}"
+            row_label="${APP_LABELS[$i]} - Durum: $status"
+
             if [ $selected_idx -eq $i ]; then
-                echo -e "${CYAN}➔ [${marker}] ${APP_LABELS[$i]}${NC}" >&2
+                print_tui_line "${CYAN}➔ [${marker}] ${row_label}${NC}" >&2
             else
-                echo -e "   [${marker}] ${APP_LABELS[$i]}" >&2
+                print_tui_line "   [${marker}] ${row_label}" >&2
             fi
         done
 
         print_separator "$BLUE" "-" >&2
-        if [ $selected_idx -eq 7 ]; then
-            echo -e "${CYAN}➔ ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
+        if [ $selected_idx -eq $save_idx ]; then
+            print_tui_line "${CYAN}➔ ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
         else
-            echo -e "   ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
+            print_tui_line "   ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
         fi
         print_separator "$BLUE" "-" >&2
+        end_tui_render >&2
 
         local action
         action=$(read_keypress)
@@ -876,10 +1112,73 @@ show_app_submenu() {
                 selected_idx=$(( (selected_idx + 1) % total ))
                 ;;
             "SPACE"|"ENTER")
-                if [ $selected_idx -eq 7 ]; then
+                if [ $selected_idx -eq $save_idx ]; then
                     return 0
                 else
                     APP_SELECTIONS[$selected_idx]=$(( 1 - APP_SELECTIONS[$selected_idx] ))
+                    APP_STATUS_LABELS[$selected_idx]=$(app_status_label "${APP_NAMES[$selected_idx]}" "${APP_SELECTIONS[$selected_idx]}")
+                fi
+                ;;
+            "LEFT"|"QUIT")
+                return 0
+                ;;
+        esac
+    done
+}
+
+show_terminal_tools_submenu() {
+    local selected_idx=0
+    local total=$((${#TERMINAL_TOOL_NAMES[@]} + 1))
+    local save_idx=${#TERMINAL_TOOL_NAMES[@]}
+
+    print_loading_header "Terminal araç durumları kontrol ediliyor..."
+    refresh_terminal_tool_status_cache
+
+    while true; do
+        begin_tui_render >&2
+        print_header "Terminal Araçları" "Brew formula seçimi" >&2
+        print_help_line "${YELLOW}↑/↓${NC} gezin  ${GREEN}ENTER/SPACE${NC} seç/bırak  ${YELLOW}←/q${NC} geri" >&2
+        print_separator "$BLUE" "-" >&2
+
+        for i in "${!TERMINAL_TOOL_NAMES[@]}"; do
+            local marker=" "
+            local installed_str="${TERMINAL_TOOL_STATUS_LABELS[$i]}"
+
+            if [ ${TERMINAL_TOOL_SELECTIONS[$i]} -eq 1 ]; then
+                marker="${GREEN}${CHECK}${NC}"
+            fi
+
+            if [ $selected_idx -eq $i ]; then
+                print_tui_line "${CYAN}➔ [${marker}] ${TERMINAL_TOOL_LABELS[$i]}${installed_str}${NC}" >&2
+            else
+                print_tui_line "   [${marker}] ${TERMINAL_TOOL_LABELS[$i]}${installed_str}" >&2
+            fi
+        done
+
+        print_separator "$BLUE" "-" >&2
+        if [ $selected_idx -eq $save_idx ]; then
+            print_tui_line "${CYAN}➔ ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
+        else
+            print_tui_line "   ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
+        fi
+        print_separator "$BLUE" "-" >&2
+        end_tui_render >&2
+
+        local action
+        action=$(read_keypress)
+
+        case $action in
+            "UP")
+                selected_idx=$(( (selected_idx - 1 + total) % total ))
+                ;;
+            "DOWN")
+                selected_idx=$(( (selected_idx + 1) % total ))
+                ;;
+            "SPACE"|"ENTER")
+                if [ $selected_idx -eq $save_idx ]; then
+                    return 0
+                else
+                    TERMINAL_TOOL_SELECTIONS[$selected_idx]=$(( 1 - TERMINAL_TOOL_SELECTIONS[$selected_idx] ))
                 fi
                 ;;
             "LEFT"|"QUIT")
@@ -895,14 +1194,11 @@ show_theme_submenu() {
     local total=$((num_themes + 1)) # themes + 1 "Kaydet ve Geri Dön"
 
     while true; do
-        local subtitle="Tema ve varsayılan profil"
-        if [ -n "$TERMINAL_DEFAULT_PROFILE" ]; then
-            subtitle="Varsayılan: $TERMINAL_DEFAULT_PROFILE"
-        fi
+        local subtitle="Varsayılan: ${THEME_LABELS[$THEME_DEFAULT]}"
 
-        clear >&2
+        begin_tui_render >&2
         print_header "Terminal Tema Seçimi" "$subtitle" >&2
-        print_help_line "${YELLOW}↑/↓${NC} gezin  ${GREEN}ENTER/SPACE${NC} seç/bırak  ${PURPLE}v${NC} varsayılan" >&2
+        print_help_line "${YELLOW}↑/↓${NC} gezin  ${GREEN}ENTER/SPACE${NC} kur/bırak  ${PURPLE}v${NC} varsayılan" >&2
         print_separator "$BLUE" "-" >&2
 
         for i in "${!THEME_NAMES[@]}"; do
@@ -922,19 +1218,20 @@ show_theme_submenu() {
             fi
 
             if [ $selected_idx -eq $i ]; then
-                echo -e "${CYAN}➔ [${marker}] ${THEME_LABELS[$i]}${installed_str}${default_str}${NC}" >&2
+                print_tui_line "${CYAN}➔ [${marker}] ${THEME_LABELS[$i]}${installed_str}${default_str}${NC}" >&2
             else
-                echo -e "   [${marker}] ${THEME_LABELS[$i]}${installed_str}${default_str}" >&2
+                print_tui_line "   [${marker}] ${THEME_LABELS[$i]}${installed_str}${default_str}" >&2
             fi
         done
 
         print_separator "$BLUE" "-" >&2
         if [ $selected_idx -eq $num_themes ]; then
-            echo -e "${CYAN}➔ ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
+            print_tui_line "${CYAN}➔ ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
         else
-            echo -e "   ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
+            print_tui_line "   ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
         fi
         print_separator "$BLUE" "-" >&2
+        end_tui_render >&2
 
         local action
         action=$(read_keypress)
@@ -948,10 +1245,8 @@ show_theme_submenu() {
                 ;;
             "SPACE"|"ENTER")
                 if [ $selected_idx -eq $num_themes ]; then
-                    local theme_sum=0
-                    for val in "${THEME_SELECTIONS[@]}"; do
-                        theme_sum=$((theme_sum + val))
-                    done
+                    local theme_sum
+                    theme_sum=$(selected_theme_count)
                     if [ $theme_sum -eq 0 ]; then
                         echo -e "\n${RED}HATA: En az bir tema seçmelisiniz!${NC}" >&2
                         sleep 1.5
@@ -959,30 +1254,30 @@ show_theme_submenu() {
                     fi
                     return 0
                 else
-                    THEME_SELECTIONS[$selected_idx]=$(( 1 - THEME_SELECTIONS[$selected_idx] ))
-                    if [ ${THEME_SELECTIONS[$selected_idx]} -eq 0 ] && [ $THEME_DEFAULT -eq $selected_idx ]; then
-                        for k in "${!THEME_NAMES[@]}"; do
-                            if [ ${THEME_SELECTIONS[$k]} -eq 1 ]; then
-                                THEME_DEFAULT=$k
-                                TERMINAL_DEFAULT_PROFILE="${THEME_NAMES[$k]}"
-                                break
-                            fi
-                        done
+                    if [ ${THEME_SELECTIONS[$selected_idx]} -eq 1 ]; then
+                        if [ $selected_idx -eq $THEME_DEFAULT ] && [ "$(selected_theme_count)" -eq 1 ]; then
+                            echo -e "\n${RED}HATA: Varsayılan olan son tema kaldırılamaz.${NC}" >&2
+                            sleep 1.5
+                            continue
+                        fi
+
+                        THEME_SELECTIONS[$selected_idx]=0
+                        if [ $THEME_DEFAULT -eq $selected_idx ]; then
+                            set_first_selected_theme_as_default
+                        fi
+                    else
+                        THEME_SELECTIONS[$selected_idx]=1
                     fi
                 fi
                 ;;
             "DEFAULT")
                 if [ $selected_idx -ge 0 ] && [ $selected_idx -lt $num_themes ]; then
-                    THEME_SELECTIONS[$selected_idx]=1
-                    THEME_DEFAULT=$selected_idx
-                    TERMINAL_DEFAULT_PROFILE="${THEME_NAMES[$selected_idx]}"
+                    set_theme_default "$selected_idx"
                 fi
                 ;;
             "LEFT"|"QUIT")
-                local theme_sum=0
-                for val in "${THEME_SELECTIONS[@]}"; do
-                    theme_sum=$((theme_sum + val))
-                done
+                local theme_sum
+                theme_sum=$(selected_theme_count)
                 if [ $theme_sum -eq 0 ]; then
                     echo -e "\n${RED}HATA: En az bir tema seçmelisiniz!${NC}" >&2
                     sleep 1.5
@@ -1014,18 +1309,24 @@ render_menu_row() {
     local prefix="   "
     local clean_label="$label"
     local padded_label
+    local label_width="$MENU_LABEL_WIDTH"
+
+    if [ -z "$button" ]; then
+        label_width=$((UI_WIDTH - 8))
+    fi
 
     if [ ${SELECTIONS[$idx]} -eq 1 ]; then
         check="${GREEN}${CHECK}${NC}"
     fi
 
-    padded_label=$(printf "%-${MENU_LABEL_WIDTH}s" "$clean_label")
+    clean_label=$(truncate_text "$clean_label" "$label_width")
+    padded_label=$(printf "%-${label_width}s" "$clean_label")
 
     if [ $CURRENT_INDEX -eq $idx ] && [ "$FOCUS_SIDE" = "left" ]; then
         prefix="${CYAN}➔${NC} "
-        echo -e "${prefix}[${check}] ${CYAN}${padded_label}${NC}${button}"
+        print_tui_line "${prefix}[${check}] ${CYAN}${padded_label}${NC}${button}"
     else
-        echo -e "${prefix}[${check}] ${padded_label}${button}"
+        print_tui_line "${prefix}[${check}] ${padded_label}${button}"
     fi
 }
 
@@ -1041,7 +1342,7 @@ menu_button() {
 }
 
 render_menu() {
-    clear
+    begin_tui_render
     local selected_components
     selected_components=$(count_selected "${SELECTIONS[@]}")
 
@@ -1059,29 +1360,35 @@ render_menu() {
             local selected_count
             selected_count=$(count_selected "${APP_SELECTIONS[@]}")
             local total_apps=${#APP_NAMES[@]}
-            label="${CHOICES[$i]} ($selected_count/$total_apps)"
+            label="Arayüzlü Uygulamalar ($selected_count/$total_apps)"
             version_btn=$(menu_button "$i" "App Seç")
+        elif [ $i -eq 3 ]; then
+            local selected_count
+            selected_count=$(count_selected "${TERMINAL_TOOL_SELECTIONS[@]}")
+            local total_tools=${#TERMINAL_TOOL_NAMES[@]}
+            label="Temel CLI & Terminal Araçları ($selected_count/$total_tools)"
+            version_btn=$(menu_button "$i" "Araç Seç")
         elif [ $i -eq 4 ]; then
-            label="${CHOICES[$i]} (v$SELECTED_RUBY_VERSION)"
+            label="Ruby & Rails (v$SELECTED_RUBY_VERSION)"
             version_btn=$(menu_button "$i" "Sürüm Seç")
         elif [ $i -eq 5 ]; then
-            label="${CHOICES[$i]} (v$SELECTED_JAVA_VERSION)"
+            label="Java & SDKMAN (v$SELECTED_JAVA_VERSION)"
             version_btn=$(menu_button "$i" "Sürüm Seç")
         elif [ $i -eq 6 ]; then
-            label="${CHOICES[$i]} (v$SELECTED_FLUTTER_VERSION)"
+            label="Flutter SDK (v$SELECTED_FLUTTER_VERSION)"
             version_btn=$(menu_button "$i" "Sürüm Seç")
         elif [ $i -eq 9 ]; then
             local default_theme="${THEME_LABELS[$THEME_DEFAULT]}"
             if [ -n "$TERMINAL_DEFAULT_PROFILE" ] && ! theme_index_for_profile "$TERMINAL_DEFAULT_PROFILE" >/dev/null; then
                 default_theme="$TERMINAL_DEFAULT_PROFILE"
             fi
-            label="${CHOICES[$i]} ($default_theme)"
+            label="Terminal & Starship ($default_theme)"
             version_btn=$(menu_button "$i" "Tema Seç")
         elif [ $i -eq 10 ]; then
             local selected_count
             selected_count=$(count_selected "${AI_SELECTIONS[@]}")
             local total_ai=${#AI_NAMES[@]}
-            label="${CHOICES[$i]} ($selected_count/$total_ai)"
+            label="Yapay Zeka Kodlama Araçları ($selected_count/$total_ai)"
             version_btn=$(menu_button "$i" "Araç Seç")
         fi
 
@@ -1092,18 +1399,19 @@ render_menu() {
 
     # Aksiyonlar (11-12)
     if [ $CURRENT_INDEX -eq 11 ]; then
-        echo -e "${CYAN}➔ ${GREEN}[ Kuruluma Başla ]${NC}"
+        print_tui_line "${CYAN}➔ ${GREEN}[ Kuruluma Başla ]${NC}"
     else
-        echo -e "   ${GREEN}[ Kuruluma Başla ]${NC}"
+        print_tui_line "   ${GREEN}[ Kuruluma Başla ]${NC}"
     fi
 
     if [ $CURRENT_INDEX -eq 12 ]; then
-        echo -e "${CYAN}➔ ${RED}[ İptal Et ve Çık ]${NC}"
+        print_tui_line "${CYAN}➔ ${RED}[ İptal Et ve Çık ]${NC}"
     else
-        echo -e "   ${RED}[ İptal Et ve Çık ]${NC}"
+        print_tui_line "   ${RED}[ İptal Et ve Çık ]${NC}"
     fi
 
     print_separator "$BLUE" "-"
+    end_tui_render
 }
 
 # İnteraktif Döngü
@@ -1122,12 +1430,12 @@ while true; do
             CURRENT_INDEX=$(( (CURRENT_INDEX + 1) % TOTAL_ITEMS ))
             ;;
         "RIGHT")
-            if [ $CURRENT_INDEX -eq 2 ] || [ $CURRENT_INDEX -eq 4 ] || [ $CURRENT_INDEX -eq 5 ] || [ $CURRENT_INDEX -eq 6 ] || [ $CURRENT_INDEX -eq 9 ] || [ $CURRENT_INDEX -eq 10 ]; then
+            if [ $CURRENT_INDEX -eq 2 ] || [ $CURRENT_INDEX -eq 3 ] || [ $CURRENT_INDEX -eq 4 ] || [ $CURRENT_INDEX -eq 5 ] || [ $CURRENT_INDEX -eq 6 ] || [ $CURRENT_INDEX -eq 9 ] || [ $CURRENT_INDEX -eq 10 ]; then
                 FOCUS_SIDE="right"
             fi
             ;;
         "LEFT")
-            if [ $CURRENT_INDEX -eq 2 ] || [ $CURRENT_INDEX -eq 4 ] || [ $CURRENT_INDEX -eq 5 ] || [ $CURRENT_INDEX -eq 6 ] || [ $CURRENT_INDEX -eq 9 ] || [ $CURRENT_INDEX -eq 10 ]; then
+            if [ $CURRENT_INDEX -eq 2 ] || [ $CURRENT_INDEX -eq 3 ] || [ $CURRENT_INDEX -eq 4 ] || [ $CURRENT_INDEX -eq 5 ] || [ $CURRENT_INDEX -eq 6 ] || [ $CURRENT_INDEX -eq 9 ] || [ $CURRENT_INDEX -eq 10 ]; then
                 FOCUS_SIDE="left"
             fi
             ;;
@@ -1155,6 +1463,11 @@ while true; do
                 # App Alt Menüsü
                 show_app_submenu
                 SELECTIONS[2]=1 # Seçim yapılınca otomatik aktif yap
+                FOCUS_SIDE="left"
+            elif [ $CURRENT_INDEX -eq 3 ] && [ "$FOCUS_SIDE" = "right" ]; then
+                # Terminal Araçları Alt Menüsü
+                show_terminal_tools_submenu
+                SELECTIONS[3]=1
                 FOCUS_SIDE="left"
             elif [ $CURRENT_INDEX -eq 4 ] && [ "$FOCUS_SIDE" = "right" ]; then
                 # Ruby Versiyon Alt Menüsü
@@ -1209,6 +1522,11 @@ while true; do
                 # App Alt Menüsü
                 show_app_submenu
                 SELECTIONS[2]=1 # Seçim yapılınca otomatik aktif yap
+                FOCUS_SIDE="left"
+            elif [ $CURRENT_INDEX -eq 3 ] && [ "$FOCUS_SIDE" = "right" ]; then
+                # Terminal Araçları Alt Menüsü
+                show_terminal_tools_submenu
+                SELECTIONS[3]=1
                 FOCUS_SIDE="left"
             elif [ $CURRENT_INDEX -eq 4 ] && [ "$FOCUS_SIDE" = "right" ]; then
                 # Ruby Versiyon Alt Menüsü (Sağ taraftayken SPACE basılırsa)
@@ -1313,43 +1631,21 @@ if [ ${SELECTIONS[2]} -eq 1 ]; then
     echo -e "${YELLOW}>> Seçilen Arayüzlü Uygulamalar (Casks) kuruluyor...${NC}"
     ensure_brew_available || exit 1
 
-    get_app_path() {
-        local cask="$1"
-        case "$cask" in
-            "docker") echo "/Applications/Docker.app" ;;
-            "postman") echo "/Applications/Postman.app" ;;
-            "ollama") echo "/Applications/Ollama.app" ;;
-            "zed") echo "/Applications/Zed.app" ;;
-            "spotify") echo "/Applications/Spotify.app" ;;
-            "android-studio") echo "/Applications/Android Studio.app" ;;
-            "rectangle") echo "/Applications/Rectangle.app" ;;
-            *) echo "" ;;
-        esac
-    }
-
     casks_to_install=()
     for i in "${!APP_NAMES[@]}"; do
         if [ ${APP_SELECTIONS[$i]} -eq 1 ]; then
             cask="${APP_NAMES[$i]}"
             label="${APP_LABELS[$i]}"
-            app_path=""
-            app_path=$(get_app_path "$cask")
-
-            installed=false
             version=""
 
-            if [ -n "$app_path" ] && [ -d "$app_path" ]; then
-                installed=true
-                version=$(defaults read "$app_path/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null)
-            fi
-
-            if [ "$installed" = true ]; then
+            if version=$(app_installed_version "$cask"); then
                 if [ -n "$version" ]; then
                     echo -e "${GREEN}✓ $label zaten kurulu (Sürüm: v$version).${NC}"
                 else
                     echo -e "${GREEN}✓ $label zaten kurulu.${NC}"
                 fi
             else
+                echo -e "${YELLOW}- $label otomatik doğrulanamadı, Homebrew cask kurulumu kontrol edilecek.${NC}"
                 casks_to_install+=("$cask")
             fi
         fi
@@ -1357,11 +1653,22 @@ if [ ${SELECTIONS[2]} -eq 1 ]; then
 
     if [ ${#casks_to_install[@]} -gt 0 ]; then
         echo "Kurulacak uygulamalar: ${casks_to_install[*]}"
-        if brew install --cask "${casks_to_install[@]}"; then
-            echo -e "${GREEN}✓ Seçilen uygulamalar başarıyla kuruldu.${NC}\n"
-        else
-            record_failure "Arayüzlü uygulama kurulumu"
-        fi
+        for cask in "${casks_to_install[@]}"; do
+            if [ "$cask" = "youtype" ]; then
+                if brew install --cask youtype; then
+                    youtype_path=""
+                    youtype_path=$(get_app_path "youtype" || true)
+                    if [ -n "$youtype_path" ]; then
+                        xattr -dr com.apple.quarantine "$youtype_path" 2>/dev/null || true
+                    fi
+                else
+                    record_failure "YouType kurulumu"
+                fi
+            else
+                brew install --cask "$cask" || record_failure "$cask kurulumu"
+            fi
+        done
+        echo -e "${GREEN}✓ Seçilen uygulama kurulumları işlendi.${NC}\n"
 
         # Reset Launchpad to force newly installed casks to show up in App Drawer immediately
         echo "Kurulan uygulamaların Launchpad (Uygulama Çekmecesi) veritabanında hemen görünmesi sağlanıyor..."
@@ -1373,9 +1680,20 @@ fi
 
 # 4. Temel CLI ve Diller
 if [ ${SELECTIONS[3]} -eq 1 ]; then
-    echo -e "${YELLOW}>> CLI araçları, Go ve Ruby kuruluyor...${NC}"
+    echo -e "${YELLOW}>> CLI araçları, terminal uygulamaları, Go ve Ruby kuruluyor...${NC}"
     ensure_brew_available || exit 1
-    brew install bash git curl unzip zip go ruby helm k9s cocoapods kubernetes-cli || record_failure "Temel CLI araçları"
+    selected_terminal_tools=()
+    for i in "${!TERMINAL_TOOL_NAMES[@]}"; do
+        if [ ${TERMINAL_TOOL_SELECTIONS[$i]} -eq 1 ]; then
+            selected_terminal_tools+=("${TERMINAL_TOOL_NAMES[$i]}")
+        fi
+    done
+
+    brew install \
+        bash git curl wget unzip zip \
+        go ruby helm k9s cocoapods kubernetes-cli \
+        "${selected_terminal_tools[@]}" \
+        || record_failure "Temel CLI araçları"
     brew link --overwrite kubernetes-cli 2>/dev/null || true
 
     if [ -d "/Applications/Xcode.app" ]; then
@@ -1683,8 +2001,7 @@ eval "$(starship init zsh)"'
 
     # Clear komutunun scrollback buffer'ı da temizlemesi için alias ekle
     echo "clear komutu için scrollback temizleme alias'ı kontrol ediliyor..."
-    append_once "$ZSHRC_FILE" "alias clear=" '# Clear command that also clears the scrollback buffer
-alias clear="clear && printf '\''\e[3J'\''"'
+    configure_clear_alias "$ZSHRC_FILE"
 
     # macOS login banner'ındaki "Last login" satırını gizle
     echo "Terminal açılışındaki Last login mesajı gizleniyor..."
@@ -1702,7 +2019,7 @@ alias clear="clear && printf '\''\e[3J'\''"'
     echo -e "${GREEN}✓ Terminal özelleştirmeleri başarıyla uygulandı.${NC}\n"
 fi
 
-# 11. Yapay Zeka Araçları (Codex, Copilot, Antigravity, OpenCode)
+# 11. Yapay Zeka Araçları (Codex, Claude Code, Copilot, Antigravity, OpenCode)
 if [ ${SELECTIONS[10]} -eq 1 ]; then
     echo -e "${YELLOW}>> Yapay Zeka Kodlama Araçları kuruluyor...${NC}"
 
@@ -1717,6 +2034,30 @@ if [ ${SELECTIONS[10]} -eq 1 ]; then
     fi
 
     if [ ${AI_SELECTIONS[1]} -eq 1 ]; then
+        if ! command -v claude &> /dev/null; then
+            echo "Claude Code kuruluyor..."
+            if ! command -v npm &> /dev/null; then
+                ensure_brew_available || exit 1
+                echo "npm bulunamadı, Node.js kuruluyor..."
+                brew install node || record_failure "Node.js/npm kurulumu"
+            fi
+
+            if command -v npm &> /dev/null; then
+                npm install -g @anthropic-ai/claude-code || record_failure "Claude Code kurulumu"
+            else
+                record_failure "Claude Code için npm bulunamadı"
+            fi
+        else
+            claude_version=$(claude --version 2>/dev/null || true)
+            if [ -n "$claude_version" ]; then
+                echo "✓ Claude Code zaten kurulu ($claude_version)."
+            else
+                echo "✓ Claude Code zaten kurulu."
+            fi
+        fi
+    fi
+
+    if [ ${AI_SELECTIONS[2]} -eq 1 ]; then
         ensure_brew_available || exit 1
         if ! command -v copilot &> /dev/null && ! command -v copilot-cli &> /dev/null; then
             echo "GitHub Copilot CLI kuruluyor..."
@@ -1726,7 +2067,7 @@ if [ ${SELECTIONS[10]} -eq 1 ]; then
         fi
     fi
 
-    if [ ${AI_SELECTIONS[2]} -eq 1 ]; then
+    if [ ${AI_SELECTIONS[3]} -eq 1 ]; then
         if ! command -v agy &> /dev/null; then
             echo "Antigravity CLI kuruluyor..."
             echo -e "${YELLOW}DİKKAT: Antigravity kurulum scripti indiriliyor ve çalıştırılıyor.${NC}"
@@ -1736,7 +2077,7 @@ if [ ${SELECTIONS[10]} -eq 1 ]; then
         fi
     fi
 
-    if [ ${AI_SELECTIONS[3]} -eq 1 ]; then
+    if [ ${AI_SELECTIONS[4]} -eq 1 ]; then
         ensure_brew_available || exit 1
         if ! command -v opencode &> /dev/null; then
             echo "OpenCode kuruluyor..."
