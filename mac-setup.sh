@@ -106,9 +106,9 @@ APP_SELECTIONS=(1 1 1 1 1 1 1 1) # All selected by default
 APP_STATUS_LABELS=()
 
 # Terminal Tools (Brew Formula)
-TERMINAL_TOOL_NAMES=("jq" "yq" "tree" "watch" "ripgrep" "fd" "fzf" "bat" "eza" "htop" "fastfetch" "nerdfetch" "tmux")
-TERMINAL_TOOL_LABELS=("jq" "yq" "tree" "watch" "ripgrep (rg)" "fd" "fzf" "bat" "eza" "htop" "fastfetch" "nerdfetch" "tmux")
-TERMINAL_TOOL_SELECTIONS=(1 1 1 1 1 1 1 1 1 1 1 1 1)
+TERMINAL_TOOL_NAMES=("jq" "yq" "tree" "watch" "ripgrep" "fd" "fzf" "bat" "eza" "htop" "fastfetch" "nerdfetch" "tmux" "gitleaks")
+TERMINAL_TOOL_LABELS=("jq" "yq" "tree" "watch" "ripgrep (rg)" "fd" "fzf" "bat" "eza" "htop" "fastfetch" "nerdfetch" "tmux" "gitleaks")
+TERMINAL_TOOL_SELECTIONS=(1 1 1 1 1 1 1 1 1 1 1 1 1 1)
 TERMINAL_TOOL_STATUS_LABELS=()
 
 # AI Coding Tools

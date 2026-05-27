@@ -9,7 +9,7 @@ This repository contains my personal macOS development environment setup script.
 - Xcode Command Line Tools and Rosetta checks
 - Homebrew installation and update
 - GUI applications such as Docker, Postman, Ollama, Zed, Android Studio, Rectangle, and YouType
-- Terminal tools such as Git, curl, jq, ripgrep, fzf, bat, eza, htop, fastfetch, nerdfetch, tmux, and k9s
+- Terminal tools such as Git, curl, jq, ripgrep, fzf, bat, eza, htop, fastfetch, nerdfetch, tmux, gitleaks, and k9s
 - Ruby/Rails, Java/SDKMAN, Flutter, Rust, and Node.js environments
 - Terminal color profiles, JetBrains Mono Nerd Font, and Starship prompt
 - Codex, Claude Code, GitHub Copilot CLI, Antigravity, and OpenCode
