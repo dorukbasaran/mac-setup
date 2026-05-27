@@ -1,38 +1,38 @@
 #!/bin/bash
 
 # ==============================================================================
-# macOS Geliştirici Ortamı İnteraktif Kurulum Sihirbazı
+# macOS Developer Environment Interactive Setup Wizard
 # ==============================================================================
 
-# Renk Tanımlamaları
+# Color definitions
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[0;33m'
 RED='\033[0;31m'
 PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
-NC='\033[0m' # Renk Sıfırlama
+NC='\033[0m' # Color reset
 CHECK="✓"
 FAILED_STEPS=()
-APP_TITLE="macOS Geliştirici Ortamı"
-APP_SUBTITLE="İnteraktif Kurulum Sihirbazı"
+APP_TITLE="macOS Developer Environment"
+APP_SUBTITLE="Interactive Setup Wizard"
 UI_WIDTH=72
 MENU_LABEL_WIDTH=50
 CLEAR_LINE='\033[K'
 
-# Seçilen Varsayılan Versiyonlar
+# Selected default versions
 SELECTED_FLUTTER_VERSION="stable"
 SELECTED_JAVA_VERSION="25-tem"
 SELECTED_RUBY_VERSION="3.4.1"
 
-# Çevrimdışı / Hata Durumu Sürüm Listeleri (Fallback)
+# Offline / error fallback version lists
 FALLBACK_FLUTTER_VERSIONS=("stable" "3.29.0" "3.27.0" "3.24.5" "3.22.3" "3.19.6")
 FALLBACK_JAVA_VERSIONS=("25-tem" "23-tem" "21-tem" "17-tem" "11-tem" "21-zulu" "17-zulu")
 FALLBACK_RUBY_VERSIONS=("3.4.1" "3.3.6" "3.2.6" "3.1.6")
 
-# Halihazırda Yüklü Sürümleri Tespit Etme Fonksiyonu
+# Installed version detection function
 detect_installed_versions() {
-    # Ruby Sürüm Tespiti
+    # Ruby version detection
     if command -v rbenv &>/dev/null; then
         local rbenv_v
         rbenv_v=$(rbenv global 2>/dev/null)
@@ -53,7 +53,7 @@ detect_installed_versions() {
         fi
     fi
 
-    # Java Sürüm Tespiti
+    # Java version detection
     if [ -L "$HOME/.sdkman/candidates/java/current" ]; then
         local sdk_java
         sdk_java=$(readlink "$HOME/.sdkman/candidates/java/current" 2>/dev/null | awk -F'/' '{print $NF}')
@@ -68,7 +68,7 @@ detect_installed_versions() {
         fi
     fi
 
-    # Flutter Sürüm Tespiti
+    # Flutter version detection
     if command -v flutter &>/dev/null; then
         local flutter_v
         flutter_v=$(flutter --version 2>/dev/null | head -n 1 | awk '{print $2}')
@@ -78,62 +78,62 @@ detect_installed_versions() {
     fi
 }
 
-# Sürüm tespitini hemen çalıştır
+# Run version detection immediately
 detect_installed_versions
 
-# Kurulum Bileşenleri
+# Setup components
 CHOICES=(
-    "Sistem Gereksinimleri (Xcode CLT & Rosetta 2)"
-    "Homebrew Paket Yöneticisi"
-    "Arayüzlü Uygulamalar (Docker, Postman, Ollama, Zed, vb.)"
-    "Temel CLI Araçları & Diller (Go, Ruby, Helm, k9s, CocoaPods)"
-    "Ruby & Rails Geliştirme Ortamı (Rails gem)"
-    "Java & SDKMAN Geliştirme Ortamı (JDK 25 Temurin)"
-    "Flutter SDK & Mobil Geliştirme Ortamı"
-    "Rust & Cargo Geliştirme Ortamı"
-    "Node.js & Web Geliştirme Ortamı (NVM, Yarn, pnpm)"
-    "Terminal Özelleştirme & Starship Entegrasyonu"
-    "Yapay Zeka Kodlama Araçları (Codex, Claude Code, Copilot, Antigravity, OpenCode)"
+    "System Requirements (Xcode CLT & Rosetta 2)"
+    "Homebrew Package Manager"
+    "GUI Applications (Docker, Postman, Ollama, Zed, etc.)"
+    "Core CLI Tools & Languages (Go, Ruby, Helm, k9s, CocoaPods)"
+    "Ruby & Rails Development Environment (Rails gem)"
+    "Java & SDKMAN Development Environment (JDK 25 Temurin)"
+    "Flutter SDK & Mobile Development Environment"
+    "Rust & Cargo Development Environment"
+    "Node.js & Web Development Environment (NVM, Yarn, pnpm)"
+    "Terminal Customization & Starship Integration"
+    "AI Coding Tools (Codex, Claude Code, Copilot, Antigravity, OpenCode)"
 )
 
-# Seçim durumları (1: seçili, 0: değil)
+# Selection states (1: selected, 0: not selected)
 SELECTIONS=(1 1 1 1 1 1 1 1 1 1 1)
 
-# Arayüzlü Uygulamalar (Casks)
+# GUI Applications (Casks)
 APP_NAMES=("docker" "postman" "ollama" "zed" "spotify" "android-studio" "rectangle" "youtype")
 APP_LABELS=("Docker" "Postman" "Ollama" "Zed Editor" "Spotify" "Android Studio" "Rectangle (Window Manager)" "YouType")
-APP_SELECTIONS=(1 1 1 1 1 1 1 1) # Varsayılan olarak hepsi seçili
+APP_SELECTIONS=(1 1 1 1 1 1 1 1) # All selected by default
 APP_STATUS_LABELS=()
 
-# Terminal Araçları (Brew Formula)
+# Terminal Tools (Brew Formula)
 TERMINAL_TOOL_NAMES=("jq" "yq" "tree" "watch" "ripgrep" "fd" "fzf" "bat" "eza" "htop" "fastfetch" "nerdfetch" "tmux")
 TERMINAL_TOOL_LABELS=("jq" "yq" "tree" "watch" "ripgrep (rg)" "fd" "fzf" "bat" "eza" "htop" "fastfetch" "nerdfetch" "tmux")
 TERMINAL_TOOL_SELECTIONS=(1 1 1 1 1 1 1 1 1 1 1 1 1)
 TERMINAL_TOOL_STATUS_LABELS=()
 
-# Yapay Zeka Kodlama Araçları
+# AI Coding Tools
 AI_NAMES=("codex" "claude-code" "copilot-cli" "antigravity" "opencode")
 AI_LABELS=("Codex CLI (OpenAI)" "Claude Code (Anthropic)" "GitHub Copilot CLI" "Antigravity CLI (Google)" "OpenCode (AnomalyCo)")
-AI_SELECTIONS=(1 1 1 1 1) # Varsayılan olarak hepsi seçili
+AI_SELECTIONS=(1 1 1 1 1) # All selected by default
 
-# Temalar
+# Themes
 THEME_NAMES=("Gruvbox-dark" "Dracula" "Nord" "Solarized-Dark" "rose-pine" "Monokai" "One-Dark" "tokyo-night")
 THEME_LABELS=("Gruvbox Dark" "Dracula" "Nord" "Solarized Dark" "Rosé Pine" "Monokai" "One Dark" "Tokyo Night")
-THEME_SELECTIONS=(1 0 1 0 1 0 1 0) # Çoklu tema seçilebilir
-THEME_DEFAULT=2 # Varsayılan olarak Nord seçili
+THEME_SELECTIONS=(1 0 1 0 1 0 1 0) # Multiple themes can be selected
+THEME_DEFAULT=2 # Nord selected by default
 TERMINAL_DEFAULT_PROFILE=""
 
 CURRENT_INDEX=0
 FOCUS_SIDE="left"
-TOTAL_ITEMS=13 # 11 bileşen + 2 aksiyon
+TOTAL_ITEMS=13 # 11 components + 2 actions
 UI_FIRST_RENDER=1
 
-# İmleç Kontrolü ve Temizleme
+# Cursor control and cleanup
 cleanup_cursor() {
-    tput cnorm # İmleci göster
+    tput cnorm # Show cursor
 }
 trap cleanup_cursor EXIT
-tput civis # İmleci gizle
+tput civis # Hide cursor
 
 begin_tui_render() {
     if [ "$UI_FIRST_RENDER" -eq 1 ]; then
@@ -154,7 +154,7 @@ print_tui_line() {
 
 record_failure() {
     FAILED_STEPS+=("$1")
-    echo -e "${RED}! $1 başarısız oldu veya eksik tamamlandı.${NC}"
+    echo -e "${RED}! $1 failed or completed partially.${NC}"
 }
 
 append_once() {
@@ -210,8 +210,8 @@ install_homebrew() {
         return 0
     fi
 
-    echo "Homebrew kuruluyor..."
-    echo -e "${YELLOW}DİKKAT: Homebrew resmi kurulum scripti indiriliyor ve çalıştırılıyor.${NC}"
+    echo "Installing Homebrew..."
+    echo -e "${YELLOW}WARNING: Downloading and running the official Homebrew installer.${NC}"
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || return 1
     load_brew_shellenv
 
@@ -231,13 +231,13 @@ ensure_brew_available() {
         return 0
     fi
 
-    echo -e "${YELLOW}Bu adım için Homebrew gerekli; sistemde bulunamadı, şimdi kurulacak.${NC}"
+    echo -e "${YELLOW}Homebrew is required for this step; it was not found and will be installed now.${NC}"
     if install_homebrew; then
         return 0
     fi
 
-    record_failure "Homebrew kurulumu"
-    echo -e "${RED}Homebrew yüklenemediği için bu adım devam edemiyor.${NC}"
+    record_failure "Homebrew installation"
+    echo -e "${RED}This step cannot continue because Homebrew could not be installed.${NC}"
     return 1
 }
 
@@ -246,7 +246,7 @@ print_failure_summary() {
         return 0
     fi
 
-    echo -e "\n${YELLOW}DİKKAT: Bazı adımlar eksik veya başarısız tamamlandı:${NC}"
+    echo -e "\n${YELLOW}WARNING: Some steps failed or completed partially:${NC}"
     for step in "${FAILED_STEPS[@]}"; do
         echo -e "${YELLOW}- $step${NC}"
     done
@@ -406,12 +406,12 @@ app_status_label() {
         if [ -n "$version" ]; then
             echo "v$version"
         else
-            echo "Yüklü"
+            echo "Installed"
         fi
     elif [ "$selected" -eq 1 ]; then
-        echo "Seçili"
+        echo "Selected"
     else
-        echo "Kontrol edilemedi"
+        echo "Could not verify"
     fi
 }
 
@@ -428,7 +428,7 @@ terminal_tool_status_label() {
     local tool="$1"
 
     if command -v "$tool" >/dev/null 2>&1 || brew list --formula "$tool" >/dev/null 2>&1; then
-        echo " ${GREEN}(Yüklü)${NC}"
+        echo " ${GREEN}(Installed)${NC}"
     else
         echo ""
     fi
@@ -583,7 +583,7 @@ download_theme_file() {
             continue
         fi
 
-        echo "[$theme_name] terminal renk profili indiriliyor..."
+        echo "[$theme_name] terminal color profile is downloading..."
         if curl -fL --retry 2 --connect-timeout 10 "$theme_url" -o "$tmp_path"; then
             mv "$tmp_path" "$theme_path"
             return 0
@@ -789,7 +789,7 @@ update_starship_palette() {
     tmp_path="${config_path}.tmp"
 
     if ! grep -q "color_orange" "$config_path" 2>/dev/null || ! grep -q "^\[palettes\\." "$config_path" 2>/dev/null; then
-        echo "✓ Mevcut starship.toml özel görünüyor, renk paleti değiştirilmedi."
+        echo "✓ Existing starship.toml looks customized; color palette was not changed."
         return 0
     fi
 
@@ -815,7 +815,7 @@ update_starship_palette() {
     print_starship_palette_toml "$palette_name" >> "$tmp_path"
     mv "$tmp_path" "$config_path"
     improve_starship_prompt_contrast "$config_path"
-    echo "✓ Starship renk paleti '$palette_name' olarak güncellendi."
+    echo "✓ Starship color palette '$palette_name' updated."
 }
 
 apply_terminal_profile_font() {
@@ -834,9 +834,9 @@ apply_terminal_profile_font() {
     [ "$font_applied" = true ]
 }
 
-# Sürüm Çekme Fonksiyonları
+# Version fetch functions
 fetch_flutter_versions() {
-    # Git ls-remote ile etiketleri sorgula (Strict 2 saniye timeout ile)
+    # Query tags with git ls-remote using a strict 2-second timeout.
     local fetched=""
     local tmp_file
     tmp_file=$(mktemp)
@@ -850,7 +850,7 @@ fetch_flutter_versions() {
     ) &
     local git_pid=$!
 
-    # Watchdog süreci
+    # Watchdog process
     (
         sleep 2
         if kill -0 "$git_pid" 2>/dev/null; then
@@ -859,7 +859,7 @@ fetch_flutter_versions() {
     ) &
     local watchdog_pid=$!
 
-    # Git işleminin bitmesini bekle
+    # Wait for the Git process to finish
     wait "$git_pid" 2>/dev/null
     kill "$watchdog_pid" 2>/dev/null
     wait "$watchdog_pid" 2>/dev/null
@@ -880,14 +880,14 @@ fetch_flutter_versions() {
 }
 
 fetch_java_versions() {
-    # JDK LTS ve Popüler Güncel Sürümler (Instant and Reliable)
+    # JDK LTS and popular current versions (instant and reliable)
     for v in "${FALLBACK_JAVA_VERSIONS[@]}"; do
         echo "$v"
     done
 }
 
 fetch_ruby_versions() {
-    # Ruby Kararlı ve Popüler Sürümler (Instant and Reliable)
+    # Stable and popular Ruby versions (instant and reliable)
     for v in "${FALLBACK_RUBY_VERSIONS[@]}"; do
         echo "$v"
     done
@@ -942,7 +942,7 @@ read_keypress() {
     fi
 }
 
-# Klavye Gezinmeli Versiyon Alt Menüsü
+# Keyboard-navigable version submenu
 show_version_submenu() {
     local title="$1"
     local current_val="$2"
@@ -951,7 +951,7 @@ show_version_submenu() {
     local total=${#options[@]}
     local selected_idx=0
 
-    # Mevcut değeri bulup imleci oraya yerleştir
+    # Find the current value and place the cursor there
     for i in "${!options[@]}"; do
         if [[ "${options[$i]}" == "$current_val" ]]; then
             selected_idx=$i
@@ -961,8 +961,8 @@ show_version_submenu() {
 
     while true; do
         begin_tui_render >&2
-        print_header "$title Sürüm Seçimi" "ENTER / SPACE ile seç" >&2
-        print_help_line "${YELLOW}↑/↓${NC} gezin  ${GREEN}ENTER/SPACE${NC} seç  ${YELLOW}←/q${NC} geri" >&2
+        print_header "$title Version Selection" "Select with ENTER / SPACE" >&2
+        print_help_line "${YELLOW}↑/↓${NC} navigate  ${GREEN}ENTER/SPACE${NC} select  ${YELLOW}←/q${NC} back" >&2
         print_separator "$BLUE" "-" >&2
 
         for i in "${!options[@]}"; do
@@ -1005,13 +1005,13 @@ show_version_submenu() {
 
 show_ai_submenu() {
     local selected_idx=0
-    local total=$((${#AI_NAMES[@]} + 1)) # araçlar + 1 "Kaydet ve Geri Dön"
+    local total=$((${#AI_NAMES[@]} + 1)) # tools + 1 "Save and Go Back"
     local save_idx=${#AI_NAMES[@]}
 
     while true; do
         begin_tui_render >&2
-        print_header "Yapay Zeka Araçları" "Araç seçimi" >&2
-        print_help_line "${YELLOW}↑/↓${NC} gezin  ${GREEN}ENTER/SPACE${NC} seç/bırak  ${YELLOW}←/q${NC} geri" >&2
+        print_header "AI Coding Tools" "Tool selection" >&2
+        print_help_line "${YELLOW}↑/↓${NC} navigate  ${GREEN}ENTER/SPACE${NC} select/deselect  ${YELLOW}←/q${NC} back" >&2
         print_separator "$BLUE" "-" >&2
 
         for i in "${!AI_NAMES[@]}"; do
@@ -1029,9 +1029,9 @@ show_ai_submenu() {
 
         print_separator "$BLUE" "-" >&2
         if [ $selected_idx -eq $save_idx ]; then
-            print_tui_line "${CYAN}➔ ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
+            print_tui_line "${CYAN}➔ ${GREEN}[ Save and Go Back ]${NC}" >&2
         else
-            print_tui_line "   ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
+            print_tui_line "   ${GREEN}[ Save and Go Back ]${NC}" >&2
         fi
         print_separator "$BLUE" "-" >&2
         end_tui_render >&2
@@ -1065,13 +1065,13 @@ show_app_submenu() {
     local total=$((${#APP_NAMES[@]} + 1))
     local save_idx=${#APP_NAMES[@]}
 
-    print_loading_header "Uygulama durumları kontrol ediliyor..."
+    print_loading_header "Checking application status..."
     refresh_app_status_cache
 
     while true; do
         begin_tui_render >&2
-        print_header "Arayüzlü Uygulamalar" "Cask seçimi" >&2
-        print_help_line "${YELLOW}↑/↓${NC} gezin  ${GREEN}ENTER/SPACE${NC} seç/bırak  ${YELLOW}←/q${NC} geri" >&2
+        print_header "GUI Applications" "Cask selection" >&2
+        print_help_line "${YELLOW}↑/↓${NC} navigate  ${GREEN}ENTER/SPACE${NC} select/deselect  ${YELLOW}←/q${NC} back" >&2
         print_separator "$BLUE" "-" >&2
 
         for i in "${!APP_NAMES[@]}"; do
@@ -1083,7 +1083,7 @@ show_app_submenu() {
             fi
 
             status="${APP_STATUS_LABELS[$i]}"
-            row_label="${APP_LABELS[$i]} - Durum: $status"
+            row_label="${APP_LABELS[$i]} - Status: $status"
 
             if [ $selected_idx -eq $i ]; then
                 print_tui_line "${CYAN}➔ [${marker}] ${row_label}${NC}" >&2
@@ -1094,9 +1094,9 @@ show_app_submenu() {
 
         print_separator "$BLUE" "-" >&2
         if [ $selected_idx -eq $save_idx ]; then
-            print_tui_line "${CYAN}➔ ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
+            print_tui_line "${CYAN}➔ ${GREEN}[ Save and Go Back ]${NC}" >&2
         else
-            print_tui_line "   ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
+            print_tui_line "   ${GREEN}[ Save and Go Back ]${NC}" >&2
         fi
         print_separator "$BLUE" "-" >&2
         end_tui_render >&2
@@ -1131,13 +1131,13 @@ show_terminal_tools_submenu() {
     local total=$((${#TERMINAL_TOOL_NAMES[@]} + 1))
     local save_idx=${#TERMINAL_TOOL_NAMES[@]}
 
-    print_loading_header "Terminal araç durumları kontrol ediliyor..."
+    print_loading_header "Checking terminal tool status..."
     refresh_terminal_tool_status_cache
 
     while true; do
         begin_tui_render >&2
-        print_header "Terminal Araçları" "Brew formula seçimi" >&2
-        print_help_line "${YELLOW}↑/↓${NC} gezin  ${GREEN}ENTER/SPACE${NC} seç/bırak  ${YELLOW}←/q${NC} geri" >&2
+        print_header "Terminal Tools" "Brew formula selection" >&2
+        print_help_line "${YELLOW}↑/↓${NC} navigate  ${GREEN}ENTER/SPACE${NC} select/deselect  ${YELLOW}←/q${NC} back" >&2
         print_separator "$BLUE" "-" >&2
 
         for i in "${!TERMINAL_TOOL_NAMES[@]}"; do
@@ -1157,9 +1157,9 @@ show_terminal_tools_submenu() {
 
         print_separator "$BLUE" "-" >&2
         if [ $selected_idx -eq $save_idx ]; then
-            print_tui_line "${CYAN}➔ ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
+            print_tui_line "${CYAN}➔ ${GREEN}[ Save and Go Back ]${NC}" >&2
         else
-            print_tui_line "   ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
+            print_tui_line "   ${GREEN}[ Save and Go Back ]${NC}" >&2
         fi
         print_separator "$BLUE" "-" >&2
         end_tui_render >&2
@@ -1191,14 +1191,14 @@ show_terminal_tools_submenu() {
 show_theme_submenu() {
     local selected_idx=$THEME_DEFAULT
     local num_themes=${#THEME_NAMES[@]}
-    local total=$((num_themes + 1)) # themes + 1 "Kaydet ve Geri Dön"
+    local total=$((num_themes + 1)) # themes + 1 "Save and Go Back"
 
     while true; do
-        local subtitle="Varsayılan: ${THEME_LABELS[$THEME_DEFAULT]}"
+        local subtitle="Default: ${THEME_LABELS[$THEME_DEFAULT]}"
 
         begin_tui_render >&2
-        print_header "Terminal Tema Seçimi" "$subtitle" >&2
-        print_help_line "${YELLOW}↑/↓${NC} gezin  ${GREEN}ENTER/SPACE${NC} kur/bırak  ${PURPLE}v${NC} varsayılan" >&2
+        print_header "Terminal Theme Selection" "$subtitle" >&2
+        print_help_line "${YELLOW}↑/↓${NC} navigate  ${GREEN}ENTER/SPACE${NC} install/skip  ${PURPLE}v${NC} default" >&2
         print_separator "$BLUE" "-" >&2
 
         for i in "${!THEME_NAMES[@]}"; do
@@ -1209,12 +1209,12 @@ show_theme_submenu() {
 
             local default_str=""
             if [ $THEME_DEFAULT -eq $i ]; then
-                default_str=" ${PURPLE}(Varsayılan)${NC}"
+                default_str=" ${PURPLE}(Default)${NC}"
             fi
 
             local installed_str=""
             if terminal_profile_installed "${THEME_NAMES[$i]}"; then
-                installed_str=" ${GREEN}(Yüklü)${NC}"
+                installed_str=" ${GREEN}(Installed)${NC}"
             fi
 
             if [ $selected_idx -eq $i ]; then
@@ -1226,9 +1226,9 @@ show_theme_submenu() {
 
         print_separator "$BLUE" "-" >&2
         if [ $selected_idx -eq $num_themes ]; then
-            print_tui_line "${CYAN}➔ ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
+            print_tui_line "${CYAN}➔ ${GREEN}[ Save and Go Back ]${NC}" >&2
         else
-            print_tui_line "   ${GREEN}[ Kaydet ve Geri Dön ]${NC}" >&2
+            print_tui_line "   ${GREEN}[ Save and Go Back ]${NC}" >&2
         fi
         print_separator "$BLUE" "-" >&2
         end_tui_render >&2
@@ -1248,7 +1248,7 @@ show_theme_submenu() {
                     local theme_sum
                     theme_sum=$(selected_theme_count)
                     if [ $theme_sum -eq 0 ]; then
-                        echo -e "\n${RED}HATA: En az bir tema seçmelisiniz!${NC}" >&2
+                        echo -e "\n${RED}ERROR: You must select at least one theme!${NC}" >&2
                         sleep 1.5
                         continue
                     fi
@@ -1256,7 +1256,7 @@ show_theme_submenu() {
                 else
                     if [ ${THEME_SELECTIONS[$selected_idx]} -eq 1 ]; then
                         if [ $selected_idx -eq $THEME_DEFAULT ] && [ "$(selected_theme_count)" -eq 1 ]; then
-                            echo -e "\n${RED}HATA: Varsayılan olan son tema kaldırılamaz.${NC}" >&2
+                            echo -e "\n${RED}ERROR: The last default theme cannot be removed.${NC}" >&2
                             sleep 1.5
                             continue
                         fi
@@ -1279,7 +1279,7 @@ show_theme_submenu() {
                 local theme_sum
                 theme_sum=$(selected_theme_count)
                 if [ $theme_sum -eq 0 ]; then
-                    echo -e "\n${RED}HATA: En az bir tema seçmelisiniz!${NC}" >&2
+                    echo -e "\n${RED}ERROR: You must select at least one theme!${NC}" >&2
                     sleep 1.5
                     continue
                 fi
@@ -1347,11 +1347,11 @@ render_menu() {
     selected_components=$(count_selected "${SELECTIONS[@]}")
 
     print_header "$APP_TITLE" "$APP_SUBTITLE"
-    print_help_line "Seçili bileşen: ${GREEN}$selected_components/${#CHOICES[@]}${NC}"
-    print_help_line "${YELLOW}↑/↓${NC} gezin  ${GREEN}ENTER/SPACE${NC} seç  ${YELLOW}→${NC} detay  ${YELLOW}a${NC} tümü  ${RED}q${NC} çıkış"
+    print_help_line "Selected components: ${GREEN}$selected_components/${#CHOICES[@]}${NC}"
+    print_help_line "${YELLOW}↑/↓${NC} navigate  ${GREEN}ENTER/SPACE${NC} select  ${YELLOW}→${NC} details  ${YELLOW}a${NC} all  ${RED}q${NC} quit"
     print_separator "$BLUE" "-"
 
-    # Bileşen Listesi (0-10)
+    # Component list (0-10)
     for i in {0..10}; do
         local label="${CHOICES[$i]}"
         local version_btn=""
@@ -1360,36 +1360,36 @@ render_menu() {
             local selected_count
             selected_count=$(count_selected "${APP_SELECTIONS[@]}")
             local total_apps=${#APP_NAMES[@]}
-            label="Arayüzlü Uygulamalar ($selected_count/$total_apps)"
-            version_btn=$(menu_button "$i" "App Seç")
+            label="GUI Applications ($selected_count/$total_apps)"
+            version_btn=$(menu_button "$i" "Choose Apps")
         elif [ $i -eq 3 ]; then
             local selected_count
             selected_count=$(count_selected "${TERMINAL_TOOL_SELECTIONS[@]}")
             local total_tools=${#TERMINAL_TOOL_NAMES[@]}
-            label="Temel CLI & Terminal Araçları ($selected_count/$total_tools)"
-            version_btn=$(menu_button "$i" "Araç Seç")
+            label="Core CLI & Terminal Tools ($selected_count/$total_tools)"
+            version_btn=$(menu_button "$i" "Choose Tools")
         elif [ $i -eq 4 ]; then
             label="Ruby & Rails (v$SELECTED_RUBY_VERSION)"
-            version_btn=$(menu_button "$i" "Sürüm Seç")
+            version_btn=$(menu_button "$i" "Choose Version")
         elif [ $i -eq 5 ]; then
             label="Java & SDKMAN (v$SELECTED_JAVA_VERSION)"
-            version_btn=$(menu_button "$i" "Sürüm Seç")
+            version_btn=$(menu_button "$i" "Choose Version")
         elif [ $i -eq 6 ]; then
             label="Flutter SDK (v$SELECTED_FLUTTER_VERSION)"
-            version_btn=$(menu_button "$i" "Sürüm Seç")
+            version_btn=$(menu_button "$i" "Choose Version")
         elif [ $i -eq 9 ]; then
             local default_theme="${THEME_LABELS[$THEME_DEFAULT]}"
             if [ -n "$TERMINAL_DEFAULT_PROFILE" ] && ! theme_index_for_profile "$TERMINAL_DEFAULT_PROFILE" >/dev/null; then
                 default_theme="$TERMINAL_DEFAULT_PROFILE"
             fi
             label="Terminal & Starship ($default_theme)"
-            version_btn=$(menu_button "$i" "Tema Seç")
+            version_btn=$(menu_button "$i" "Choose Theme")
         elif [ $i -eq 10 ]; then
             local selected_count
             selected_count=$(count_selected "${AI_SELECTIONS[@]}")
             local total_ai=${#AI_NAMES[@]}
-            label="Yapay Zeka Kodlama Araçları ($selected_count/$total_ai)"
-            version_btn=$(menu_button "$i" "Araç Seç")
+            label="AI Coding Tools ($selected_count/$total_ai)"
+            version_btn=$(menu_button "$i" "Choose Tools")
         fi
 
         render_menu_row "$i" "$label" "$version_btn"
@@ -1397,24 +1397,24 @@ render_menu() {
 
     print_separator "$BLUE" "-"
 
-    # Aksiyonlar (11-12)
+    # Actions (11-12)
     if [ $CURRENT_INDEX -eq 11 ]; then
-        print_tui_line "${CYAN}➔ ${GREEN}[ Kuruluma Başla ]${NC}"
+        print_tui_line "${CYAN}➔ ${GREEN}[ Start Setup ]${NC}"
     else
-        print_tui_line "   ${GREEN}[ Kuruluma Başla ]${NC}"
+        print_tui_line "   ${GREEN}[ Start Setup ]${NC}"
     fi
 
     if [ $CURRENT_INDEX -eq 12 ]; then
-        print_tui_line "${CYAN}➔ ${RED}[ İptal Et ve Çık ]${NC}"
+        print_tui_line "${CYAN}➔ ${RED}[ Cancel and Exit ]${NC}"
     else
-        print_tui_line "   ${RED}[ İptal Et ve Çık ]${NC}"
+        print_tui_line "   ${RED}[ Cancel and Exit ]${NC}"
     fi
 
     print_separator "$BLUE" "-"
     end_tui_render
 }
 
-# İnteraktif Döngü
+# Interactive loop
 sync_theme_state_from_terminal
 while true; do
     render_menu
@@ -1441,55 +1441,55 @@ while true; do
             ;;
         "ENTER")
             if [ $CURRENT_INDEX -eq 11 ]; then
-                # Kuruluma Başla tetiklendiğinde ENTER ile devam et
+                # Continue with ENTER when Start Setup is triggered
                 if [ ${SELECTIONS[9]} -eq 1 ]; then
                     theme_sum=0
                     for val in "${THEME_SELECTIONS[@]}"; do
                         theme_sum=$((theme_sum + val))
                     done
                     if [ $theme_sum -eq 0 ]; then
-                        echo -e "\n${RED}HATA: Terminal özelleştirme aktifken en az bir tema seçmelisiniz!${NC}"
+                        echo -e "\n${RED}ERROR: You must select at least one theme while terminal customization is enabled!${NC}"
                         sleep 2
                         continue
                     fi
                 fi
                 break
             elif [ $CURRENT_INDEX -eq 12 ]; then
-                # İptal Et ve Çık
-                echo -e "\n${RED}Kurulum iptal edildi. Çıkış yapılıyor...${NC}"
+                # Cancel and Exit
+                echo -e "\n${RED}Setup canceled. Exiting...${NC}"
                 tput cnorm
                 exit 0
             elif [ $CURRENT_INDEX -eq 2 ] && [ "$FOCUS_SIDE" = "right" ]; then
-                # App Alt Menüsü
+                # App submenu
                 show_app_submenu
-                SELECTIONS[2]=1 # Seçim yapılınca otomatik aktif yap
+                SELECTIONS[2]=1 # Automatically enable after making a selection
                 FOCUS_SIDE="left"
             elif [ $CURRENT_INDEX -eq 3 ] && [ "$FOCUS_SIDE" = "right" ]; then
-                # Terminal Araçları Alt Menüsü
+                # Terminal Tools submenu
                 show_terminal_tools_submenu
                 SELECTIONS[3]=1
                 FOCUS_SIDE="left"
             elif [ $CURRENT_INDEX -eq 4 ] && [ "$FOCUS_SIDE" = "right" ]; then
-                # Ruby Versiyon Alt Menüsü
-                print_loading_header "Kurulabilir Ruby sürümleri listeleniyor..."
+                # Ruby version submenu
+                print_loading_header "Listing installable Ruby versions..."
 
                 ruby_vers=("${FALLBACK_RUBY_VERSIONS[@]}")
                 result=$(show_version_submenu "Ruby" "$SELECTED_RUBY_VERSION" "${ruby_vers[@]}")
                 SELECTED_RUBY_VERSION="$result"
-                SELECTIONS[4]=1 # Seçim yapılınca otomatik aktif yap
+                SELECTIONS[4]=1 # Automatically enable after making a selection
                 FOCUS_SIDE="left"
             elif [ $CURRENT_INDEX -eq 5 ] && [ "$FOCUS_SIDE" = "right" ]; then
-                # Java Versiyon Alt Menüsü
-                print_loading_header "Kurulabilir Java (JDK) sürümleri listeleniyor..."
+                # Java version submenu
+                print_loading_header "Listing installable Java (JDK) versions..."
 
                 java_vers=("${FALLBACK_JAVA_VERSIONS[@]}")
                 result=$(show_version_submenu "Java" "$SELECTED_JAVA_VERSION" "${java_vers[@]}")
                 SELECTED_JAVA_VERSION="$result"
-                SELECTIONS[5]=1 # Seçim yapılınca otomatik aktif yap
+                SELECTIONS[5]=1 # Automatically enable after making a selection
                 FOCUS_SIDE="left"
             elif [ $CURRENT_INDEX -eq 6 ] && [ "$FOCUS_SIDE" = "right" ]; then
-                # Flutter Versiyon Alt Menüsü
-                print_loading_header "Resmi Git deposundan kararlı Flutter sürümleri sorgulanıyor..."
+                # Flutter version submenu
+                print_loading_header "Querying stable Flutter versions from the official Git repository..."
 
                 flutter_vers=()
                 while IFS= read -r line; do
@@ -1498,20 +1498,20 @@ while true; do
 
                 result=$(show_version_submenu "Flutter" "$SELECTED_FLUTTER_VERSION" "${flutter_vers[@]}")
                 SELECTED_FLUTTER_VERSION="$result"
-                SELECTIONS[6]=1 # Seçim yapılınca otomatik aktif yap
+                SELECTIONS[6]=1 # Automatically enable after making a selection
                 FOCUS_SIDE="left"
             elif [ $CURRENT_INDEX -eq 9 ] && [ "$FOCUS_SIDE" = "right" ]; then
-                # Terminal Tema Alt Menüsü
+                # Terminal theme submenu
                 show_theme_submenu
-                SELECTIONS[9]=1 # Seçim yapılınca otomatik aktif yap
+                SELECTIONS[9]=1 # Automatically enable after making a selection
                 FOCUS_SIDE="left"
             elif [ $CURRENT_INDEX -eq 10 ] && [ "$FOCUS_SIDE" = "right" ]; then
-                # AI Araç Alt Menüsü
+                # AI tools submenu
                 show_ai_submenu
-                SELECTIONS[10]=1 # Seçim yapılınca otomatik aktif yap
+                SELECTIONS[10]=1 # Automatically enable after making a selection
                 FOCUS_SIDE="left"
             else
-                # Sürüm menüsü olmayan diğer bileşenleri ENTER ile de seçebiliriz
+                # Components without a version menu can also be selected with ENTER
                 if [ $CURRENT_INDEX -ge 0 ] && [ $CURRENT_INDEX -le 10 ]; then
                     SELECTIONS[$CURRENT_INDEX]=$(( 1 - SELECTIONS[$CURRENT_INDEX] ))
                 fi
@@ -1519,36 +1519,36 @@ while true; do
             ;;
         "SPACE")
             if [ $CURRENT_INDEX -eq 2 ] && [ "$FOCUS_SIDE" = "right" ]; then
-                # App Alt Menüsü
+                # App submenu
                 show_app_submenu
-                SELECTIONS[2]=1 # Seçim yapılınca otomatik aktif yap
+                SELECTIONS[2]=1 # Automatically enable after making a selection
                 FOCUS_SIDE="left"
             elif [ $CURRENT_INDEX -eq 3 ] && [ "$FOCUS_SIDE" = "right" ]; then
-                # Terminal Araçları Alt Menüsü
+                # Terminal Tools submenu
                 show_terminal_tools_submenu
                 SELECTIONS[3]=1
                 FOCUS_SIDE="left"
             elif [ $CURRENT_INDEX -eq 4 ] && [ "$FOCUS_SIDE" = "right" ]; then
-                # Ruby Versiyon Alt Menüsü (Sağ taraftayken SPACE basılırsa)
-                print_loading_header "Kurulabilir Ruby sürümleri listeleniyor..."
+                # Ruby version submenu (when SPACE is pressed on the right side)
+                print_loading_header "Listing installable Ruby versions..."
 
                 ruby_vers=("${FALLBACK_RUBY_VERSIONS[@]}")
                 result=$(show_version_submenu "Ruby" "$SELECTED_RUBY_VERSION" "${ruby_vers[@]}")
                 SELECTED_RUBY_VERSION="$result"
-                SELECTIONS[4]=1 # Seçim yapılınca otomatik aktif yap
+                SELECTIONS[4]=1 # Automatically enable after making a selection
                 FOCUS_SIDE="left"
             elif [ $CURRENT_INDEX -eq 5 ] && [ "$FOCUS_SIDE" = "right" ]; then
-                # Java Versiyon Alt Menüsü (Sağ taraftayken SPACE basılırsa)
-                print_loading_header "Kurulabilir Java (JDK) sürümleri listeleniyor..."
+                # Java version submenu (when SPACE is pressed on the right side)
+                print_loading_header "Listing installable Java (JDK) versions..."
 
                 java_vers=("${FALLBACK_JAVA_VERSIONS[@]}")
                 result=$(show_version_submenu "Java" "$SELECTED_JAVA_VERSION" "${java_vers[@]}")
                 SELECTED_JAVA_VERSION="$result"
-                SELECTIONS[5]=1 # Seçim yapılınca otomatik aktif yap
+                SELECTIONS[5]=1 # Automatically enable after making a selection
                 FOCUS_SIDE="left"
             elif [ $CURRENT_INDEX -eq 6 ] && [ "$FOCUS_SIDE" = "right" ]; then
-                # Flutter Versiyon Alt Menüsü (Sağ taraftayken SPACE basılırsa)
-                print_loading_header "Resmi Git deposundan kararlı Flutter sürümleri sorgulanıyor..."
+                # Flutter version submenu (when SPACE is pressed on the right side)
+                print_loading_header "Querying stable Flutter versions from the official Git repository..."
 
                 flutter_vers=()
                 while IFS= read -r line; do
@@ -1557,20 +1557,20 @@ while true; do
 
                 result=$(show_version_submenu "Flutter" "$SELECTED_FLUTTER_VERSION" "${flutter_vers[@]}")
                 SELECTED_FLUTTER_VERSION="$result"
-                SELECTIONS[6]=1 # Seçim yapılınca otomatik aktif yap
+                SELECTIONS[6]=1 # Automatically enable after making a selection
                 FOCUS_SIDE="left"
             elif [ $CURRENT_INDEX -eq 9 ] && [ "$FOCUS_SIDE" = "right" ]; then
-                # Terminal Tema Alt Menüsü
+                # Terminal theme submenu
                 show_theme_submenu
-                SELECTIONS[9]=1 # Seçim yapılınca otomatik aktif yap
+                SELECTIONS[9]=1 # Automatically enable after making a selection
                 FOCUS_SIDE="left"
             elif [ $CURRENT_INDEX -eq 10 ] && [ "$FOCUS_SIDE" = "right" ]; then
-                # AI Araç Alt Menüsü
+                # AI tools submenu
                 show_ai_submenu
-                SELECTIONS[10]=1 # Seçim yapılınca otomatik aktif yap
+                SELECTIONS[10]=1 # Automatically enable after making a selection
                 FOCUS_SIDE="left"
             else
-                # Sol taraftayken normal space davranışı
+                # Normal SPACE behavior on the left side
                 if [ $CURRENT_INDEX -ge 0 ] && [ $CURRENT_INDEX -le 10 ]; then
                     SELECTIONS[$CURRENT_INDEX]=$(( 1 - SELECTIONS[$CURRENT_INDEX] ))
                 fi
@@ -1580,55 +1580,55 @@ while true; do
             toggle_all
             ;;
         "QUIT")
-            echo -e "\n${RED}Kurulum iptal edildi. Çıkış yapılıyor...${NC}"
+            echo -e "\n${RED}Setup canceled. Exiting...${NC}"
             tput cnorm
             exit 0
             ;;
     esac
 done
 
-tput cnorm # Kurulum başlarken imleci geri getir
+tput cnorm # Restore cursor before setup starts
 clear
-print_header "$APP_TITLE" "Kurulum Başlıyor"
-echo -e "  ${GREEN}Seçimleriniz alındı. Seçili adımlar uygulanıyor.${NC}\n"
+print_header "$APP_TITLE" "Setup Starting"
+echo -e "  ${GREEN}Selections received. Running selected steps.${NC}\n"
 
-# 1. Sistem Gereksinimleri
+# 1. System requirements
 if [ ${SELECTIONS[0]} -eq 1 ]; then
-    echo -e "${YELLOW}>> Sistem gereksinimleri kontrol ediliyor...${NC}"
+    echo -e "${YELLOW}>> Checking system requirements...${NC}"
     if ! xcode-select -p >/dev/null 2>&1; then
         xcode-select --install
-        echo -e "${YELLOW}Xcode Command Line Tools kurulumu başlatıldı.${NC}"
-        echo -e "${YELLOW}Kurulum tamamlandıktan sonra scripti tekrar çalıştırın.${NC}"
+        echo -e "${YELLOW}Xcode Command Line Tools installation started.${NC}"
+        echo -e "${YELLOW}Run the script again after installation completes.${NC}"
         exit 1
     fi
 
     if /usr/bin/pgrep oahd >/dev/null 2>&1; then
-        echo "Rosetta 2 zaten kurulu."
+        echo "Rosetta 2 is already installed."
     else
         sudo softwareupdate --install-rosetta --agree-to-license
     fi
-    echo -e "${GREEN}✓ Sistem gereksinimleri tamamlandı.${NC}\n"
+    echo -e "${GREEN}✓ System requirements completed.${NC}\n"
 fi
 
-# 2. Homebrew Kurulumu
+# 2. Homebrew Installation
 if [ ${SELECTIONS[1]} -eq 1 ]; then
-    echo -e "${YELLOW}>> Homebrew paket yöneticisi kontrol ediliyor...${NC}"
+    echo -e "${YELLOW}>> Checking Homebrew package manager...${NC}"
     load_brew_shellenv
     if ! command -v brew &> /dev/null; then
         if ! install_homebrew; then
-            record_failure "Homebrew kurulumu"
-            echo -e "${RED}Homebrew yüklenemediği için Homebrew gerektiren adımlar çalışamaz.${NC}"
+            record_failure "Homebrew installation"
+            echo -e "${RED}Steps requiring Homebrew cannot run because Homebrew could not be installed.${NC}"
             exit 1
         fi
     else
         brew update || record_failure "Homebrew update"
     fi
-    echo -e "${GREEN}✓ Homebrew tamamlandı.${NC}\n"
+    echo -e "${GREEN}✓ Homebrew completed.${NC}\n"
 fi
 
-# 3. Casks Kurulumu
+# 3. Cask installation
 if [ ${SELECTIONS[2]} -eq 1 ]; then
-    echo -e "${YELLOW}>> Seçilen Arayüzlü Uygulamalar (Casks) kuruluyor...${NC}"
+    echo -e "${YELLOW}>> Installing selected GUI applications (casks)...${NC}"
     ensure_brew_available || exit 1
 
     casks_to_install=()
@@ -1640,19 +1640,19 @@ if [ ${SELECTIONS[2]} -eq 1 ]; then
 
             if version=$(app_installed_version "$cask"); then
                 if [ -n "$version" ]; then
-                    echo -e "${GREEN}✓ $label zaten kurulu (Sürüm: v$version).${NC}"
+                    echo -e "${GREEN}✓ $label is already installed (Version: v$version).${NC}"
                 else
-                    echo -e "${GREEN}✓ $label zaten kurulu.${NC}"
+                    echo -e "${GREEN}✓ $label is already installed.${NC}"
                 fi
             else
-                echo -e "${YELLOW}- $label otomatik doğrulanamadı, Homebrew cask kurulumu kontrol edilecek.${NC}"
+                echo -e "${YELLOW}- $label could not be auto-verified; Homebrew cask installation will be checked.${NC}"
                 casks_to_install+=("$cask")
             fi
         fi
     done
 
     if [ ${#casks_to_install[@]} -gt 0 ]; then
-        echo "Kurulacak uygulamalar: ${casks_to_install[*]}"
+        echo "Applications to install: ${casks_to_install[*]}"
         for cask in "${casks_to_install[@]}"; do
             if [ "$cask" = "youtype" ]; then
                 if brew install --cask youtype; then
@@ -1662,25 +1662,25 @@ if [ ${SELECTIONS[2]} -eq 1 ]; then
                         xattr -dr com.apple.quarantine "$youtype_path" 2>/dev/null || true
                     fi
                 else
-                    record_failure "YouType kurulumu"
+                    record_failure "YouType installation"
                 fi
             else
-                brew install --cask "$cask" || record_failure "$cask kurulumu"
+                brew install --cask "$cask" || record_failure "$cask installation"
             fi
         done
-        echo -e "${GREEN}✓ Seçilen uygulama kurulumları işlendi.${NC}\n"
+        echo -e "${GREEN}✓ Selected application installations processed.${NC}\n"
 
         # Reset Launchpad to force newly installed casks to show up in App Drawer immediately
-        echo "Kurulan uygulamaların Launchpad (Uygulama Çekmecesi) veritabanında hemen görünmesi sağlanıyor..."
+        echo "Refreshing Launchpad so installed applications appear immediately..."
         defaults write com.apple.dock ResetLaunchPad -bool true && killall Dock 2>/dev/null || true
     else
-        echo -e "${GREEN}✓ Tüm seçili uygulamalar zaten kurulu, yeni kurulum yapılmadı.${NC}\n"
+        echo -e "${GREEN}✓ All selected applications are already installed; no new installation was performed.${NC}\n"
     fi
 fi
 
-# 4. Temel CLI ve Diller
+# 4. Core CLI and languages
 if [ ${SELECTIONS[3]} -eq 1 ]; then
-    echo -e "${YELLOW}>> CLI araçları, terminal uygulamaları, Go ve Ruby kuruluyor...${NC}"
+    echo -e "${YELLOW}>> Installing CLI tools, terminal applications, Go, and Ruby...${NC}"
     ensure_brew_available || exit 1
     selected_terminal_tools=()
     for i in "${!TERMINAL_TOOL_NAMES[@]}"; do
@@ -1693,177 +1693,177 @@ if [ ${SELECTIONS[3]} -eq 1 ]; then
         bash git curl wget unzip zip \
         go ruby helm k9s cocoapods kubernetes-cli \
         "${selected_terminal_tools[@]}" \
-        || record_failure "Temel CLI araçları"
+        || record_failure "Core CLI tools"
     brew link --overwrite kubernetes-cli 2>/dev/null || true
 
     if [ -d "/Applications/Xcode.app" ]; then
-        echo "Tam sürüm Xcode bulundu, ayarları yapılıyor..."
+        echo "Full Xcode installation found; configuring it..."
         sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
         sudo xcodebuild -runFirstLaunch
     else
-        echo "DİKKAT: Tam sürüm Xcode bulunamadı (/Applications/Xcode.app)."
-        echo "        iOS ve macOS geliştirmeleri için App Store'dan Xcode indirmelisiniz."
+        echo "WARNING: Full Xcode was not found (/Applications/Xcode.app)."
+        echo "        Download Xcode from the App Store for iOS and macOS development."
     fi
-    echo -e "${GREEN}✓ CLI ve dil bağımlılıkları tamamlandı.${NC}\n"
+    echo -e "${GREEN}✓ CLI and language dependencies completed.${NC}\n"
 fi
 
-# 5. Ruby & Rails (rbenv entegre edildi)
+# 5. Ruby & Rails (rbenv integrated)
 if [ ${SELECTIONS[4]} -eq 1 ]; then
-    echo -e "${YELLOW}>> Ruby & Rails kurulumu yapılıyor (Seçilen Sürüm: v$SELECTED_RUBY_VERSION)...${NC}"
+    echo -e "${YELLOW}>> Installing Ruby & Rails (Selected Version: v$SELECTED_RUBY_VERSION)...${NC}"
     ensure_brew_available || exit 1
 
-    # rbenv ve ruby-build kurulumu
-    echo "rbenv ve ruby-build kuruluyor..."
-    brew install rbenv ruby-build || record_failure "rbenv ve ruby-build kurulumu"
+    # rbenv and ruby-build installation
+    echo "Installing rbenv and ruby-build..."
+    brew install rbenv ruby-build || record_failure "rbenv and ruby-build installation"
     if ! command -v rbenv >/dev/null 2>&1; then
-        record_failure "rbenv komutu"
-        echo -e "${RED}rbenv bulunamadığı için Ruby & Rails adımı atlanıyor.${NC}"
+        record_failure "rbenv command"
+        echo -e "${RED}Skipping Ruby & Rails because rbenv was not found.${NC}"
     else
 
-        # rbenv yapılandırması
+        # rbenv configuration
         ZSHRC_FILE="$HOME/.zshrc"
         append_once "$ZSHRC_FILE" "rbenv init" '# Initialize rbenv
 eval "$(rbenv init -)"'
         eval "$(rbenv init -)"
 
-        echo "Ruby v$SELECTED_RUBY_VERSION kuruluyor (Bu işlem birkaç dakika sürebilir)..."
+        echo "Ruby v$SELECTED_RUBY_VERSION is being installed (this may take several minutes)..."
         if rbenv versions | grep -q "$SELECTED_RUBY_VERSION"; then
-            echo "✓ Ruby v$SELECTED_RUBY_VERSION zaten rbenv ile kurulu."
+            echo "✓ Ruby v$SELECTED_RUBY_VERSION is already installed with rbenv."
         else
-            rbenv install "$SELECTED_RUBY_VERSION" || record_failure "Ruby v$SELECTED_RUBY_VERSION kurulumu"
+            rbenv install "$SELECTED_RUBY_VERSION" || record_failure "Ruby v$SELECTED_RUBY_VERSION installation"
         fi
 
-        rbenv global "$SELECTED_RUBY_VERSION" || record_failure "Ruby global sürüm ayarı"
+        rbenv global "$SELECTED_RUBY_VERSION" || record_failure "Ruby global version setting"
 
-        # Gem path ayarı
+        # Gem path setting
         append_once "$HOME/.zprofile" ".rbenv/shims" 'export PATH="$HOME/.rbenv/shims:$PATH"'
         export PATH="$HOME/.rbenv/shims:$PATH"
 
-        echo "Rails gem kuruluyor..."
-        gem install rails || record_failure "Rails gem kurulumu"
+        echo "Installing Rails gem..."
+        gem install rails || record_failure "Rails gem installation"
         rbenv rehash
     fi
-    echo -e "${GREEN}✓ Ruby & Rails kurulumu tamamlandı.${NC}\n"
+    echo -e "${GREEN}✓ Ruby & Rails installation completed.${NC}\n"
 fi
 
 # 6. Java & SDKMAN
 if [ ${SELECTIONS[5]} -eq 1 ]; then
-    echo -e "${YELLOW}>> Java & SDKMAN kurulumu yapılıyor (Seçilen Sürüm: v$SELECTED_JAVA_VERSION)...${NC}"
+    echo -e "${YELLOW}>> Installing Java & SDKMAN (Selected Version: v$SELECTED_JAVA_VERSION)...${NC}"
     if [ ! -d "$HOME/.sdkman" ]; then
-        echo -e "${YELLOW}DİKKAT: SDKMAN resmi kurulum scripti indiriliyor ve çalıştırılıyor.${NC}"
-        curl -fsSL "https://get.sdkman.io" | bash || record_failure "SDKMAN kurulumu"
+        echo -e "${YELLOW}WARNING: Downloading and running the official SDKMAN installer.${NC}"
+        curl -fsSL "https://get.sdkman.io" | bash || record_failure "SDKMAN installation"
     fi
 
     if [ ! -s "$HOME/.sdkman/bin/sdkman-init.sh" ]; then
-        record_failure "SDKMAN init dosyası"
-        echo -e "${RED}SDKMAN yüklenemediği için Java adımı atlanıyor.${NC}"
+        record_failure "SDKMAN init file"
+        echo -e "${RED}Skipping Java because SDKMAN could not be installed.${NC}"
     else
         source "$HOME/.sdkman/bin/sdkman-init.sh"
-        echo "JDK $SELECTED_JAVA_VERSION kuruluyor..."
-        sdk install java "$SELECTED_JAVA_VERSION" || record_failure "JDK $SELECTED_JAVA_VERSION kurulumu"
-        sdk default java "$SELECTED_JAVA_VERSION" || record_failure "JDK varsayılan sürüm ayarı"
+        echo "Installing JDK $SELECTED_JAVA_VERSION..."
+        sdk install java "$SELECTED_JAVA_VERSION" || record_failure "JDK $SELECTED_JAVA_VERSION installation"
+        sdk default java "$SELECTED_JAVA_VERSION" || record_failure "JDK default version setting"
     fi
 
-    echo -e "${GREEN}✓ Java & SDKMAN kurulumu tamamlandı.${NC}\n"
+    echo -e "${GREEN}✓ Java & SDKMAN installation completed.${NC}\n"
 fi
 
 # 7. Flutter SDK
 if [ ${SELECTIONS[6]} -eq 1 ]; then
-    echo -e "${YELLOW}>> Flutter SDK ve Mobil Geliştirme Ortamı kuruluyor (Seçilen Sürüm: v$SELECTED_FLUTTER_VERSION)...${NC}"
+    echo -e "${YELLOW}>> Installing Flutter SDK and mobile development environment (Selected Version: v$SELECTED_FLUTTER_VERSION)...${NC}"
     FLUTTER_DIR="$HOME/development/flutter"
 
     if [ ! -d "$FLUTTER_DIR" ]; then
         mkdir -p ~/development
-        echo "Flutter SDK $SELECTED_FLUTTER_VERSION klonlanıyor..."
-        git clone https://github.com/flutter/flutter.git -b "$SELECTED_FLUTTER_VERSION" "$FLUTTER_DIR" || record_failure "Flutter SDK klonlama"
+        echo "Flutter SDK $SELECTED_FLUTTER_VERSION is being cloned..."
+        git clone https://github.com/flutter/flutter.git -b "$SELECTED_FLUTTER_VERSION" "$FLUTTER_DIR" || record_failure "Flutter SDK clone"
         append_once "$HOME/.zprofile" "development/flutter/bin" 'export PATH="$PATH:$HOME/development/flutter/bin"'
         export PATH="$PATH:$HOME/development/flutter/bin"
         flutter precache || record_failure "Flutter precache"
     else
-        echo "Mevcut Flutter kurulumu bulundu. Seçilen sürüme ($SELECTED_FLUTTER_VERSION) geçiş yapılıyor..."
+        echo "Existing Flutter installation found. Switching to selected version ($SELECTED_FLUTTER_VERSION)..."
         (
             cd "$FLUTTER_DIR" || exit 1
             git fetch --tags &&
             git checkout "$SELECTED_FLUTTER_VERSION" &&
             flutter precache
-        ) || record_failure "Flutter sürüm geçişi"
+        ) || record_failure "Flutter version switch"
     fi
 
-    echo "Flutter Doctor çalıştırılıyor ve lisanslar onaylanıyor..."
+    echo "Running Flutter Doctor and accepting licenses..."
     export PATH="$PATH:$HOME/development/flutter/bin"
     yes | flutter doctor --android-licenses >/dev/null 2>&1 || true
     flutter doctor || true
 
     print_separator "$BLUE" "-"
-    echo -e "  ${YELLOW}DİKKAT:${NC} Android SDK eksikse Android Studio'yu bir kez açıp"
-    echo -e "  varsayılan SDK indirmesini tamamlayın. Ardından çalıştırın:"
+    echo -e "  ${YELLOW}WARNING:${NC} If Android SDK is missing, open Android Studio once and"
+    echo -e "  complete the default SDK download. Then run:"
     echo -e "  ${CYAN}flutter doctor --android-licenses${NC}"
     print_separator "$BLUE" "-"
-    echo -e "${GREEN}✓ Flutter kurulumu tamamlandı.${NC}\n"
+    echo -e "${GREEN}✓ Flutter installation completed.${NC}\n"
 fi
 
 # 8. Rust & Cargo
 if [ ${SELECTIONS[7]} -eq 1 ]; then
-    echo -e "${YELLOW}>> Rust ve Cargo kuruluyor...${NC}"
+    echo -e "${YELLOW}>> Installing Rust and Cargo...${NC}"
     if ! command -v rustc >/dev/null 2>&1; then
-        echo -e "${YELLOW}DİKKAT: Rustup resmi kurulum scripti indiriliyor ve çalıştırılıyor.${NC}"
-        curl --proto '=https' --tlsv1.2 -sSf "https://sh.rustup.rs" | sh -s -- -y || record_failure "Rustup kurulumu"
+        echo -e "${YELLOW}WARNING: Downloading and running the official Rustup installer.${NC}"
+        curl --proto '=https' --tlsv1.2 -sSf "https://sh.rustup.rs" | sh -s -- -y || record_failure "Rustup installation"
         [ -s "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
         append_once "$HOME/.zprofile" ".cargo/env" 'source "$HOME/.cargo/env"'
     else
         rustup update || record_failure "Rustup update"
     fi
-    echo -e "${GREEN}✓ Rust ve Cargo kurulumu tamamlandı.${NC}\n"
+    echo -e "${GREEN}✓ Rust and Cargo installation completed.${NC}\n"
 fi
 
 # 9. Node.js (NVM) & Web Dev
 if [ ${SELECTIONS[8]} -eq 1 ]; then
-    echo -e "${YELLOW}>> Node.js (NVM) ve Web Geliştirme Araçları kuruluyor...${NC}"
+    echo -e "${YELLOW}>> Installing Node.js (NVM) and web development tools...${NC}"
     if [ ! -d "$HOME/.nvm" ]; then
-        echo -e "${YELLOW}DİKKAT: NVM resmi kurulum scripti indiriliyor ve çalıştırılıyor.${NC}"
-        curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash || record_failure "NVM kurulumu"
+        echo -e "${YELLOW}WARNING: Downloading and running the official NVM installer.${NC}"
+        curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash || record_failure "NVM installation"
         export NVM_DIR="$HOME/.nvm"
         [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
     else
-        echo "NVM zaten kurulu, güncelleniyor..."
+        echo "NVM is already installed; updating..."
         export NVM_DIR="$HOME/.nvm"
         [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
     fi
     if ! command -v nvm >/dev/null 2>&1; then
-        record_failure "NVM komutu"
-        echo -e "${RED}NVM yüklenemediği için Node.js adımı atlanıyor.${NC}"
-        echo -e "${GREEN}✓ Node.js & Web Geliştirme Araçları tamamlandı.${NC}\n"
+        record_failure "NVM command"
+        echo -e "${RED}Skipping Node.js because NVM could not be installed.${NC}"
+        echo -e "${GREEN}✓ Node.js & web development tools completed.${NC}\n"
     else
-        nvm install --lts || record_failure "Node.js LTS kurulumu"
-        nvm use --lts || record_failure "Node.js LTS aktif etme"
-        nvm alias default 'lts/*' || record_failure "NVM varsayılan alias"
+        nvm install --lts || record_failure "Node.js LTS installation"
+        nvm use --lts || record_failure "activate Node.js LTS"
+        nvm alias default 'lts/*' || record_failure "NVM default alias"
 
-        echo "Yarn ve pnpm kuruluyor..."
-        npm install -g yarn pnpm || record_failure "Yarn ve pnpm kurulumu"
-        echo -e "${GREEN}✓ Node.js & Web Geliştirme Araçları tamamlandı.${NC}\n"
+        echo "Installing Yarn and pnpm..."
+        npm install -g yarn pnpm || record_failure "Yarn and pnpm installation"
+        echo -e "${GREEN}✓ Node.js & web development tools completed.${NC}\n"
     fi
 fi
 
-# 10. Terminal Özelleştirme & Temalar
+# 10. Terminal customization & themes
 if [ ${SELECTIONS[9]} -eq 1 ]; then
-    echo -e "${YELLOW}>> Terminal Özelleştirmesi ve Tema Kurulumu Başlatılıyor...${NC}"
+    echo -e "${YELLOW}>> Starting terminal customization and theme installation...${NC}"
     ensure_brew_available || exit 1
 
     if ! command -v starship &> /dev/null; then
-        echo "Starship kuruluyor..."
-        brew install starship || record_failure "Starship kurulumu"
+        echo "Installing Starship..."
+        brew install starship || record_failure "Starship installation"
     else
-        echo "✓ Starship zaten kurulu."
+        echo "✓ Starship is already installed."
     fi
 
     if ! brew list --cask 2>/dev/null | grep -q "font-jetbrains-mono-nerd-font"; then
-        echo "JetBrains Mono Nerd Font kuruluyor..."
-        brew install --cask font-jetbrains-mono-nerd-font || record_failure "JetBrains Mono Nerd Font kurulumu"
+        echo "Installing JetBrains Mono Nerd Font..."
+        brew install --cask font-jetbrains-mono-nerd-font || record_failure "JetBrains Mono Nerd Font installation"
     else
-        echo "✓ JetBrains Mono Nerd Font zaten kurulu."
+        echo "✓ JetBrains Mono Nerd Font is already installed."
     fi
 
-    # Seçilen her temayı indir ve içe aktar
+    # Download and import each selected theme
     default_theme_name=""
     for i in "${!THEME_NAMES[@]}"; do
         if [ ${THEME_SELECTIONS[$i]} -eq 1 ]; then
@@ -1927,37 +1927,37 @@ if [ ${SELECTIONS[9]} -eq 1 ]; then
 
             theme_path="$HOME/$theme_file"
             if [ ! -f "$theme_path" ]; then
-                download_theme_file "$theme_path" "$theme_name" "$theme_url" "$theme_url_alt" || record_failure "$theme_name tema indirme"
+                download_theme_file "$theme_path" "$theme_name" "$theme_url" "$theme_url_alt" || record_failure "$theme_name theme download"
             elif terminal_profile_exists "$expected_profile_name"; then
-                echo "[$expected_profile_name] Terminal profili zaten yüklü."
+                echo "[$expected_profile_name] Terminal profile is already installed."
             else
-                echo "[$theme_name] dosyası mevcut, Terminal profiline aktarılacak..."
+                echo "[$theme_name] file exists and will be imported into Terminal..."
             fi
 
             if [[ -f "$theme_path" ]]; then
                 if ! set_terminal_profile_file_name "$theme_path" "$expected_profile_name"; then
-                    echo -e "${YELLOW}! $theme_name dosyasındaki profil adı güncellenemedi, mevcut ad kullanılacak.${NC}"
+                    echo -e "${YELLOW}! $theme_name profile name in the file could not be updated; existing name will be used.${NC}"
                 fi
                 terminal_profile_name=$(read_terminal_profile_name "$theme_path" "$expected_profile_name")
 
                 if import_terminal_profile "$theme_path" "$terminal_profile_name"; then
-                    echo -e "${GREEN}✓ $terminal_profile_name profili Terminal'e aktarıldı.${NC}"
+                    echo -e "${GREEN}✓ $terminal_profile_name profile was imported into Terminal.${NC}"
                 else
-                    echo -e "${YELLOW}! $terminal_profile_name profili doğrulanamadı, tema dosyası yenileniyor...${NC}"
+                    echo -e "${YELLOW}! $terminal_profile_name profile could not be verified; refreshing theme file...${NC}"
                     if download_theme_file "$theme_path" "$theme_name" "$theme_url" "$theme_url_alt"; then
                         if ! set_terminal_profile_file_name "$theme_path" "$expected_profile_name"; then
-                            echo -e "${YELLOW}! $theme_name dosyasındaki profil adı güncellenemedi, mevcut ad kullanılacak.${NC}"
+                            echo -e "${YELLOW}! $theme_name profile name in the file could not be updated; existing name will be used.${NC}"
                         fi
                         terminal_profile_name=$(read_terminal_profile_name "$theme_path" "$expected_profile_name")
                         if import_terminal_profile "$theme_path" "$terminal_profile_name"; then
-                            echo -e "${GREEN}✓ $terminal_profile_name profili yeniden indirildi ve aktarıldı.${NC}"
+                            echo -e "${GREEN}✓ $terminal_profile_name profile was re-downloaded and imported.${NC}"
                         else
-                            record_failure "$theme_name tema import"
-                            echo -e "${YELLOW}! $terminal_profile_name profili Terminal'de doğrulanamadı.${NC}"
+                            record_failure "$theme_name theme import"
+                            echo -e "${YELLOW}! $terminal_profile_name profile could not be verified in Terminal.${NC}"
                         fi
                     else
-                        record_failure "$theme_name tema yenileme"
-                        echo -e "${YELLOW}! $theme_name tema dosyası yenilenemedi.${NC}"
+                        record_failure "$theme_name theme refresh"
+                        echo -e "${YELLOW}! $theme_name theme file could not be refreshed.${NC}"
                     fi
                 fi
 
@@ -1966,93 +1966,93 @@ if [ ${SELECTIONS[9]} -eq 1 ]; then
                 fi
 
                 if apply_terminal_profile_font "$terminal_profile_name"; then
-                    echo -e "${GREEN}✓ $terminal_profile_name profili JetBrains Mono yazı tipiyle başarıyla yapılandırıldı.${NC}"
+                    echo -e "${GREEN}✓ $terminal_profile_name profile was configured with the JetBrains Mono font.${NC}"
                 else
-                    echo -e "${YELLOW}! $terminal_profile_name profili yapılandırıldı ancak JetBrains Mono yazı tipi uygulanamadı (Terminal'i yeniden başlatıp tekrar deneyebilirsiniz).${NC}"
+                    echo -e "${YELLOW}! $terminal_profile_name profile was configured, but the JetBrains Mono font could not be applied (restart Terminal and try again).${NC}"
                 fi
             else
-                echo -e "${RED}DİKKAT: $theme_name profili bulunamadı!${NC}"
+                echo -e "${RED}WARNING: $theme_name profile was not found!${NC}"
             fi
         fi
     done
 
-    # Varsayılan Tema Seçimi
-    starship_preset="gruvbox-rainbow" # Gruvbox'taki efsanevi renkli imleç/prompt tüm temalar için aktif olsun!
+    # Default Theme Selection
+    starship_preset="gruvbox-rainbow" # Use the colorful Gruvbox-style prompt preset for all themes.
     if [ -z "$default_theme_name" ]; then
         default_theme_name="${THEME_NAMES[$THEME_DEFAULT]}"
     fi
 
-    echo "Varsayılan tema '$default_theme_name' olarak ayarlanıyor..."
+    echo "Default theme '$default_theme_name' is being set..."
     set_terminal_default_profile "$default_theme_name"
 
-    # Aktif terminal pencerelerini/sekmelerini seçilen varsayılan temaya geçir (AppleScript ile canlı geçiş)
-    echo "Terminal canlı teması '$default_theme_name' olarak güncelleniyor..."
+    # Switch active Terminal windows/tabs to the selected default theme (live AppleScript update)
+    echo "Live Terminal theme '$default_theme_name' is being updated..."
     if terminal_profile_exists "$default_theme_name"; then
         osascript -e "tell application \"Terminal\" to if exists window 1 then set current settings of first window to settings set \"$default_theme_name\"" 2>/dev/null || true
     else
-        record_failure "$default_theme_name varsayılan tema ayarı"
+        record_failure "$default_theme_name default theme setting"
     fi
 
-    # Zsh Yapılandırmasının Güncellenmesi (.zshrc)
-    echo "Starship ve terminal kısayolları için .zshrc yapılandırması güncelleniyor..."
+    # Updating Zsh configuration (.zshrc)
+    echo "Updating .zshrc for Starship and terminal shortcuts..."
     ZSHRC_FILE="$HOME/.zshrc"
     append_once "$ZSHRC_FILE" "starship init zsh" '# Initialize Starship Prompt
 eval "$(starship init zsh)"'
 
-    # Clear komutunun scrollback buffer'ı da temizlemesi için alias ekle
-    echo "clear komutu için scrollback temizleme alias'ı kontrol ediliyor..."
+    # Add alias so clear also clears the scrollback buffer
+    echo "Checking clear alias for scrollback cleanup..."
     configure_clear_alias "$ZSHRC_FILE"
 
-    # macOS login banner'ındaki "Last login" satırını gizle
-    echo "Terminal açılışındaki Last login mesajı gizleniyor..."
-    touch "$HOME/.hushlogin" || record_failure "Terminal Last login mesajını gizleme"
+    # Hide the "Last login" line in the macOS login banner
+    echo "Hiding the Last login message at Terminal startup..."
+    touch "$HOME/.hushlogin" || record_failure "hide Terminal Last login message"
 
-    # Starship Teması Preset Oluşturulması
-    echo "Starship varsayılan teması ($starship_preset) kontrol ediliyor..."
+    # Creating Starship theme preset
+    echo "Starship default theme ($starship_preset) is being checked..."
     mkdir -p "$HOME/.config"
     if [ -f "$HOME/.config/starship.toml" ]; then
-        update_starship_palette "$HOME/.config/starship.toml" "$default_theme_name" || record_failure "Starship renk paleti güncelleme"
+        update_starship_palette "$HOME/.config/starship.toml" "$default_theme_name" || record_failure "Starship color palette update"
     else
-        starship preset "$starship_preset" -o "$HOME/.config/starship.toml" || record_failure "Starship preset oluşturma"
-        update_starship_palette "$HOME/.config/starship.toml" "$default_theme_name" || record_failure "Starship renk paleti güncelleme"
+        starship preset "$starship_preset" -o "$HOME/.config/starship.toml" || record_failure "Starship preset creation"
+        update_starship_palette "$HOME/.config/starship.toml" "$default_theme_name" || record_failure "Starship color palette update"
     fi
-    echo -e "${GREEN}✓ Terminal özelleştirmeleri başarıyla uygulandı.${NC}\n"
+    echo -e "${GREEN}✓ Terminal customizations were applied successfully.${NC}\n"
 fi
 
-# 11. Yapay Zeka Araçları (Codex, Claude Code, Copilot, Antigravity, OpenCode)
+# 11. AI Coding Tools (Codex, Claude Code, Copilot, Antigravity, OpenCode)
 if [ ${SELECTIONS[10]} -eq 1 ]; then
-    echo -e "${YELLOW}>> Yapay Zeka Kodlama Araçları kuruluyor...${NC}"
+    echo -e "${YELLOW}>> Installing AI coding tools...${NC}"
 
     if [ ${AI_SELECTIONS[0]} -eq 1 ]; then
         ensure_brew_available || exit 1
         if ! command -v codex &> /dev/null; then
-            echo "Codex CLI kuruluyor..."
-            brew install --cask codex || record_failure "Codex CLI kurulumu"
+            echo "Installing Codex CLI..."
+            brew install --cask codex || record_failure "Codex CLI installation"
         else
-            echo "✓ Codex CLI zaten kurulu."
+            echo "✓ Codex CLI is already installed."
         fi
     fi
 
     if [ ${AI_SELECTIONS[1]} -eq 1 ]; then
         if ! command -v claude &> /dev/null; then
-            echo "Claude Code kuruluyor..."
+            echo "Installing Claude Code..."
             if ! command -v npm &> /dev/null; then
                 ensure_brew_available || exit 1
-                echo "npm bulunamadı, Node.js kuruluyor..."
-                brew install node || record_failure "Node.js/npm kurulumu"
+                echo "npm was not found; installing Node.js..."
+                brew install node || record_failure "Node.js/npm installation"
             fi
 
             if command -v npm &> /dev/null; then
-                npm install -g @anthropic-ai/claude-code || record_failure "Claude Code kurulumu"
+                npm install -g @anthropic-ai/claude-code || record_failure "Claude Code installation"
             else
-                record_failure "Claude Code için npm bulunamadı"
+                record_failure "npm was not found for Claude Code"
             fi
         else
             claude_version=$(claude --version 2>/dev/null || true)
             if [ -n "$claude_version" ]; then
-                echo "✓ Claude Code zaten kurulu ($claude_version)."
+                echo "✓ Claude Code is already installed ($claude_version)."
             else
-                echo "✓ Claude Code zaten kurulu."
+                echo "✓ Claude Code is already installed."
             fi
         fi
     fi
@@ -2060,45 +2060,45 @@ if [ ${SELECTIONS[10]} -eq 1 ]; then
     if [ ${AI_SELECTIONS[2]} -eq 1 ]; then
         ensure_brew_available || exit 1
         if ! command -v copilot &> /dev/null && ! command -v copilot-cli &> /dev/null; then
-            echo "GitHub Copilot CLI kuruluyor..."
-            brew install copilot-cli || record_failure "GitHub Copilot CLI kurulumu"
+            echo "Installing GitHub Copilot CLI..."
+            brew install copilot-cli || record_failure "GitHub Copilot CLI installation"
         else
-            echo "✓ GitHub Copilot CLI zaten kurulu."
+            echo "✓ GitHub Copilot CLI is already installed."
         fi
     fi
 
     if [ ${AI_SELECTIONS[3]} -eq 1 ]; then
         if ! command -v agy &> /dev/null; then
-            echo "Antigravity CLI kuruluyor..."
-            echo -e "${YELLOW}DİKKAT: Antigravity kurulum scripti indiriliyor ve çalıştırılıyor.${NC}"
-            curl -fsSL https://antigravity.google/cli/install.sh | bash || record_failure "Antigravity CLI kurulumu"
+            echo "Installing Antigravity CLI..."
+            echo -e "${YELLOW}WARNING: Downloading and running the Antigravity installer.${NC}"
+            curl -fsSL https://antigravity.google/cli/install.sh | bash || record_failure "Antigravity CLI installation"
         else
-            echo "✓ Antigravity CLI zaten kurulu."
+            echo "✓ Antigravity CLI is already installed."
         fi
     fi
 
     if [ ${AI_SELECTIONS[4]} -eq 1 ]; then
         ensure_brew_available || exit 1
         if ! command -v opencode &> /dev/null; then
-            echo "OpenCode kuruluyor..."
-            brew install anomalyco/tap/opencode || record_failure "OpenCode kurulumu"
+            echo "Installing OpenCode..."
+            brew install anomalyco/tap/opencode || record_failure "OpenCode installation"
         else
-            echo "✓ OpenCode zaten kurulu."
+            echo "✓ OpenCode is already installed."
         fi
     fi
-    echo -e "${GREEN}✓ Yapay Zeka Kodlama Araçları kurulumu tamamlandı.${NC}\n"
+    echo -e "${GREEN}✓ AI coding tools installation completed.${NC}\n"
 fi
 
-# Temizlik işlemleri (Gürültülü Homebrew cleanup çıktıları elendi)
-echo "Homebrew gereksiz önbellekleri temizleniyor..."
+# Cleanup operations (noisy Homebrew cleanup output filtered)
+echo "Cleaning unnecessary Homebrew caches..."
 if command -v brew >/dev/null 2>&1; then
     brew cleanup 2>&1 | grep -v -i "skipping" || true
 else
-    echo "Homebrew bulunamadığı için cleanup atlandı."
+    echo "Skipping cleanup because Homebrew was not found."
 fi
 
-# Key repeat hızlandır (macOS Ayarları)
-echo "macOS klavye hızı ayarlanıyor..."
+# Speed up key repeat (macOS settings)
+echo "Configuring macOS keyboard speed..."
 defaults write NSGlobalDomain KeyRepeat -int 2
 defaults write NSGlobalDomain InitialKeyRepeat -int 15
 
@@ -2106,11 +2106,11 @@ print_failure_summary
 
 echo
 if [ ${#FAILED_STEPS[@]} -eq 0 ]; then
-    print_header "Kurulum Tamamlandı" "Tüm seçili adımlar başarıyla bitti"
+    print_header "Setup Complete" "All selected steps completed successfully"
 else
-    print_header "Kurulum Tamamlandı" "Bazı adımlar kontrol istiyor"
+    print_header "Setup Complete" "Some steps need attention"
 fi
-echo -e "  ${BLUE}Yeni PATH ve terminal ayarları aynı pencerede etkinleştiriliyor...${NC}"
+echo -e "  ${BLUE}Applying new PATH and terminal settings in this window...${NC}"
 print_separator "$BLUE" "-"
 
 if [ -t 0 ] && [ -n "$SHELL" ] && [ -x "$SHELL" ]; then

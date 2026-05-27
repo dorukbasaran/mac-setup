@@ -1,27 +1,27 @@
 # mac-setup
 
-Bu repository, benim kişisel macOS geliştirme ortamı kurulum scriptimi içerir.
+This repository contains my personal macOS development environment setup script.
 
-`mac-setup.sh`, yeni veya temizlenmiş bir Mac üzerinde kullandığım temel geliştirme araçlarını, arayüzlü uygulamaları, terminal temasını ve AI kodlama araçlarını interaktif bir menüyle kurmak için hazırlanmıştır.
+`mac-setup.sh` is an interactive installer for the development tools, GUI applications, terminal theme, and AI coding tools I use on a new or freshly reset Mac.
 
-## İçerik
+## Contents
 
-- Xcode Command Line Tools ve Rosetta kontrolü
-- Homebrew kurulumu ve güncellemesi
-- Docker, Postman, Ollama, Zed, Android Studio gibi arayüzlü uygulamalar
-- Git, curl, jq, ripgrep, fzf, bat, eza, htop, fastfetch, nerdfetch, tmux, k9s gibi terminal araçları
-- Ruby/Rails, Java/SDKMAN, Flutter, Rust, Node.js ortamları
-- Terminal renk profilleri, JetBrains Mono Nerd Font ve Starship prompt
-- Codex, Claude Code, GitHub Copilot CLI, Antigravity ve OpenCode
+- Xcode Command Line Tools and Rosetta checks
+- Homebrew installation and update
+- GUI applications such as Docker, Postman, Ollama, Zed, Android Studio, Rectangle, and YouType
+- Terminal tools such as Git, curl, jq, ripgrep, fzf, bat, eza, htop, fastfetch, nerdfetch, tmux, and k9s
+- Ruby/Rails, Java/SDKMAN, Flutter, Rust, and Node.js environments
+- Terminal color profiles, JetBrains Mono Nerd Font, and Starship prompt
+- Codex, Claude Code, GitHub Copilot CLI, Antigravity, and OpenCode
 
-## Kullanım
+## Usage
 
 ```sh
 ./mac-setup.sh
 ```
 
-Menüde ok tuşlarıyla gezebilir, `ENTER` veya `SPACE` ile seçimleri açıp kapatabilir, sağ okla detay menülerine girebilirsiniz.
+Use the arrow keys to navigate the menu, `ENTER` or `SPACE` to toggle selections, and the right arrow to open detail menus.
 
-## Not
+## Note
 
-Bu script kişisel tercihlerime göre düzenlenmiştir. Başka bir makinede çalıştırmadan önce seçili araçları, terminal temalarını ve shell ayarlarını gözden geçirmek iyi olur.
+This script is tailored to my personal preferences. Review the selected tools, terminal themes, and shell settings before running it on another machine.
