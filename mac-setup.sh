@@ -823,12 +823,25 @@ apply_terminal_profile_font() {
     local font_applied=false
     local f_name
 
-    for f_name in "JetBrainsMono Nerd Font" "JetBrainsMonoNerdFont-Regular" "JetBrainsMonoNF-Regular" "JetBrainsMonoNF" "JetBrains Mono"; do
-        if osascript -e "tell application \"Terminal\" to set font name of settings set \"$profile_name\" to \"$f_name\"" 2>/dev/null; then
+    local target_fonts=("JetBrainsMono NFM" "JetBrainsMonoNL NFM" "JetBrainsMonoNF-Regular" "JetBrainsMonoNFM-Regular" "JetBrainsMono Nerd Font" "JetBrainsMonoNerdFont-Regular" "JetBrainsMonoNF")
+    for f_name in "${target_fonts[@]}"; do
+        osascript -e "tell application \"Terminal\" to set font name of settings set \"$profile_name\" to \"$f_name\"" 2>/dev/null || true
+        local applied_font
+        applied_font=$(osascript -e "tell application \"Terminal\" to get font name of settings set \"$profile_name\"" 2>/dev/null || true)
+        if [[ "$applied_font" == *"NF"* ]] || [[ "$applied_font" == *"Nerd"* ]]; then
             font_applied=true
             break
         fi
     done
+
+    if [ "$font_applied" = false ]; then
+        osascript -e "tell application \"Terminal\" to set font name of settings set \"$profile_name\" to \"JetBrains Mono\"" 2>/dev/null || true
+        local applied_font
+        applied_font=$(osascript -e "tell application \"Terminal\" to get font name of settings set \"$profile_name\"" 2>/dev/null || true)
+        if [[ "$applied_font" == *"JetBrains"* ]]; then
+            font_applied=true
+        fi
+    fi
     osascript -e "tell application \"Terminal\" to set font size of settings set \"$profile_name\" to 16" 2>/dev/null || true
 
     [ "$font_applied" = true ]
